@@ -131,4 +131,27 @@ describe('bindSessionNavigation', () => {
     expect(isBoardOpen()).toBe(false)
     expect(sessions.spyOpen).toHaveBeenCalledTimes(1)
   })
+
+  it('exits a board opened after an HMR-style module re-evaluation', () => {
+    // Regression: the client-hmr hot swap re-evaluates the plugin module. The
+    // wrapper installed by the OLD module copy stays on `sessions.open`
+    // (kbBound idempotency skips re-binding), so its `exitBoard` must close
+    // the SAME shared board state that the NEW module copy's `enterBoard`
+    // opens. Module-level singletons would break this (old exit vs new enter).
+    const sessions = makeSessions()
+    const ctx = makeCtx(sessions)
+    bindSessionNavigation(ctx as never) // "old module copy" binds first
+
+    // Simulate the swap: the "new copy" re-applies and sees kbBound=true
+    // (skips re-wrapping) — then the user opens the board through the new
+    // copy's enterBoard, and clicks a session through the old copy's wrapper.
+    bindSessionNavigation(ctx as never)
+    openBoard(ctx)
+
+    ctx.sessions.open('s1')
+
+    expect(isBoardOpen()).toBe(false)
+    expect(sessions.spyOpen).toHaveBeenCalledTimes(1)
+    expect(sessions.spyOpen).toHaveBeenCalledWith('s1')
+  })
 })
