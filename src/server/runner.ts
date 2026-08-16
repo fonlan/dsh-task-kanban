@@ -7,7 +7,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import { appendFile, readFile } from 'node:fs/promises'
-import type { SessionId } from '@deepseek-ai/dsh-session'
+import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -16,7 +16,8 @@ import type { KanbanCard, ErrorKind, Lane, Plan } from '../shared/card.js'
 import type { TaskStore } from './task-store.js'
 import type { KanbanSettingsFace } from './settings.js'
 import { currentBranch, detectBaseRef, hasStashMessage, isGitRepo, isTreeDirty, revParse, runGit, unmergedPaths } from './git.js'
-import { mergePrompt, phasePrompt, refinementPrompt } from './prompts.js'
+import { interactiveRefinementPrompt, mergePrompt, phasePrompt, refinementPrompt } from './prompts.js'
+import { loadCardSkill, parseSkillGesture, skillInvocationMessage } from './skills.js'
 import { registerKanbanTools, type KanbanToolResolver } from './tools.js'
 import type {} from '@deepseek-ai/dsh-agent-presets'
 
@@ -162,12 +163,20 @@ export class KanbanRunner implements KanbanToolResolver {
     return this.store.list(workspacePath)
   }
 
-  async createTask(input: { workspacePath: string; requirement: string; model: string; provider?: string }): Promise<KanbanCard> {
+  async createTask(input: { workspacePath: string; requirement: string; model: string; provider?: string; skill?: string }): Promise<KanbanCard> {
+    // A leading /skill-name gesture chooses the refinement skill; it is
+    // stripped from the stored requirement so the prose the model sees stays
+    // clean. The explicit `skill` field (client-parsed) wins when both are
+    // present.
+    const parsed = parseSkillGesture(input.requirement)
+    const skill = input.skill !== undefined && input.skill !== '' ? input.skill : parsed.skill
+    const requirement = skill !== undefined ? parsed.requirement : input.requirement.trim()
     const card = await this.store.create({
       workspacePath: input.workspacePath,
-      requirement: input.requirement,
+      requirement,
       model: input.model,
       provider: input.provider,
+      ...(skill !== undefined ? { skill } : {}),
       status: 'refining',
     })
     await this.ensureGitignoreDsh(input.workspacePath)
@@ -334,10 +343,62 @@ export class KanbanRunner implements KanbanToolResolver {
       const handle = await this.createAgent(sessionId, wsPath, route, this.toolResolver())
       this.keepHandle(cardId, handle)
       await this.attachRefinementSession(wsPath, sessionId)
-      handle.agent.followup(this.asUserMessage(refinementPrompt(card.requirement, wsPath)))
+      // The agent scope is the layer where preset skill providers live
+      // (skill-filesystem + tool-skill); load the card's skill through it.
+      const skill = card.skill !== undefined
+        ? await loadCardSkill(this.ctx, card.skill, wsPath, handle.agent)
+        : undefined
+      if (card.skill !== undefined && skill === undefined) {
+        await this.fail(cardId, 'refine_failed', `Skill "${card.skill}" 不存在或不可用于用户调用，请检查后重试`, 'demand')
+        return
+      }
+      if (skill !== undefined) {
+        // Queue the canonical <skill_content> block as injected context for
+        // the same pre-step that claims the refinement prompt (instructions
+        // form with the harness's skill-invocation source).
+        handle.agent.inject(skillInvocationMessage(skill))
+      }
+      const interactive = skill !== undefined
+      handle.agent.followup(this.asUserMessage(
+        interactive ? interactiveRefinementPrompt(card.requirement, wsPath) : refinementPrompt(card.requirement, wsPath),
+      ))
+      await this.driveRefinement(cardId, wsPath, sessionId, handle, interactive)
+    } catch (error) {
+      console.error('[task-kanban] refinement create/drive failed:', String(error))
+      await this.fail(cardId, 'refine_failed', `细化会话失败: ${String(error)}`, 'demand')
+    }
+  }
+
+  /**
+   * Drive the refinement session to a terminal card state. Non-interactive
+   * cards follow the original contract: the agent finishes one turn and must
+   * have written the plan. Interactive cards (created with a refinement
+   * skill) may ask the user clarifying questions — the session is explicit
+   * and visible in the workspace chat, so the runner waits for each reply
+   * instead of failing, and only settles when the plan is written or the
+   * session errors out.
+   */
+  private async driveRefinement(
+    cardId: string,
+    wsPath: string,
+    sessionId: SessionId,
+    handle: AgentHandle,
+    interactive: boolean,
+  ): Promise<void> {
+    while (true) {
+      // Arm the user-reply signal BEFORE waiting so no reply can slip past.
+      const reply = this.waitForUserReply(sessionId)
+      const settlement = this.waitForCardSettlement(cardId, wsPath)
       await handle.agent.whenIdle()
       const fresh = await this.store.get(wsPath, cardId)
-      if (fresh !== undefined && fresh.status === 'refining') {
+      if (fresh === undefined || fresh.status !== 'refining') {
+        reply.dispose()
+        settlement.dispose()
+        return
+      }
+      if (!interactive) {
+        reply.dispose()
+        settlement.dispose()
         // debug: log the session tail regardless
         try {
           const events = handle.agent.session.events
@@ -350,11 +411,55 @@ export class KanbanRunner implements KanbanToolResolver {
           console.error('[task-kanban] could not read session events:', String(error))
         }
         await this.fail(cardId, 'refine_failed', '细化会话结束但未通过 kanban_write_plan 写回计划', 'demand')
+        return
       }
-    } catch (error) {
-      console.error('[task-kanban] refinement create/drive failed:', String(error))
-      await this.fail(cardId, 'refine_failed', `细化会话失败: ${String(error)}`, 'demand')
+      // Interactive: the agent went idle without writing the plan — it asked
+      // the user something and is waiting for a reply. Wait for the next
+      // human message, then drive the agent through it and re-check. Also
+      // escape if the card is externally settled (writePlan/fail) without a
+      // message, so a stuck session cannot pin the card in 'refining'.
+      await Promise.race([reply.promise, settlement.promise])
+      reply.dispose()
+      settlement.dispose()
     }
+  }
+
+  /**
+   * A promise resolving when the card stops being 'refining' (planned,
+   * failed, or gone), plus a disposer stopping the polling interval.
+   */
+  private waitForCardSettlement(cardId: string, wsPath: string): { promise: Promise<void>; dispose(): void } {
+    let resolve!: () => void
+    const promise = new Promise<void>((res) => { resolve = res })
+    const timer = setInterval(async () => {
+      const fresh = await this.store.get(wsPath, cardId)
+      if (fresh === undefined || fresh.status !== 'refining') {
+        clearInterval(timer)
+        resolve()
+      }
+    }, 1000)
+    timer.unref?.()
+    return { promise, dispose: () => clearInterval(timer) }
+  }
+
+  /**
+   * A promise resolving when a NEW human message enters the given session,
+   * plus a disposer detaching the listener. Messages injected by plugins with
+   * non-`user` sources (such as our skill-invocation instructions) never
+   * resolve it — only real human replies drive the interactive refinement.
+   */
+  private waitForUserReply(sessionId: SessionId): { promise: Promise<void>; dispose(): void } {
+    let settle!: () => void
+    const promise = new Promise<void>((resolve) => { settle = resolve })
+    const listener = (session: Session, event: SessionEvent): void => {
+      if (session.id !== sessionId) return
+      if (event.type !== 'user/message') return
+      const source = ('source' in event.data ? (event.data as { source?: { kind?: string } }).source : undefined)
+      if (source?.kind === 'user') settle()
+    }
+    const detach = this.ctx.on('session/event', listener)
+    const dispose = (): void => { if (typeof detach === 'function') detach() }
+    return { promise, dispose }
   }
 
   private async createAgent(

@@ -121,6 +121,11 @@
 .kb-card-running .kb-card-badge { background: rgba(59, 130, 246, 0.3); }
 .kb-card-error .kb-card-badge { background: rgba(239, 68, 68, 0.3); }
 .kb-card-phase { opacity: 0.8; }
+.kb-card-skill {
+  background: rgba(139, 92, 246, 0.22);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
 .kb-card-model { opacity: 0.55; }
 .kb-card-error-text { margin-top: 6px; font-size: 12px; color: #f87171; word-break: break-all; }
 .kb-card-worktree { margin-top: 4px; font-size: 11px; opacity: 0.5; word-break: break-all; }
@@ -210,6 +215,16 @@
 .kb-modal-title { font-size: 16px; font-weight: 700; margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
 .kb-field { display: block; margin-bottom: 12px; }
 .kb-field > span { display: block; font-size: 12px; opacity: 0.75; margin-bottom: 4px; }
+.kb-field-hint {
+  display: block;
+  font-size: 11px;
+  opacity: 0.55;
+  margin-top: 4px;
+}
+.kb-field-hint-skill {
+  opacity: 0.9;
+  color: #a78bfa;
+}
 .kb-field-row { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
 .kb-input {
   width: 100%;
@@ -226,6 +241,14 @@
 .kb-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 .kb-detail-section { margin-bottom: 12px; }
 .kb-detail-label { font-size: 12px; opacity: 0.65; margin-bottom: 4px; }
+.kb-detail-skill {
+  display: inline-block;
+  font-size: 11px;
+  background: rgba(139, 92, 246, 0.22);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-bottom: 4px;
+}
 .kb-detail-text { white-space: pre-wrap; word-break: break-all; font-size: 13px; }
 .kb-detail-error .kb-detail-text { color: #f87171; }
 .kb-detail-status {

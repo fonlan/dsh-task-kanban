@@ -30,8 +30,8 @@ async function call<T>(method: string, payload: Record<string, unknown> = {}): P
 
 export const api = {
   list: (workspacePath: string) => call<KanbanCard[]>('list', { workspacePath }),
-  create: (workspacePath: string, requirement: string, model: string, provider?: string) =>
-    call<KanbanCard>('create', { workspacePath, requirement, model, provider }),
+  create: (workspacePath: string, requirement: string, model: string, provider?: string, skill?: string) =>
+    call<KanbanCard>('create', { workspacePath, requirement, model, provider, ...(skill !== undefined && skill !== '' ? { skill } : {}) }),
   move: (cardId: string, toLane: Lane) => call<{ ok: boolean; message?: string }>('move', { cardId, toLane }),
   stop: (cardId: string) => call<{ ok: boolean; message?: string }>('stop', { cardId }),
   retry: (cardId: string) => call<{ ok: boolean; message?: string }>('retry', { cardId }),

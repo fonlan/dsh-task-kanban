@@ -15,6 +15,16 @@ function firstLine(text: string): string {
   return text.split('\n').find((l) => l.trim() !== '')?.trim() ?? ''
 }
 
+/** The leading `/skill-name` gesture at the start of the requirement input. */
+const SKILL_GESTURE = /^\s*\/([a-z0-9]+(?:-[a-z0-9]+)*)(?=\s|$)/
+
+/** Extract a leading `/skill-name` token plus the cleaned remainder. */
+function parseSkillGesture(raw: string): { skill?: string; requirement: string } {
+  const m = SKILL_GESTURE.exec(raw)
+  if (m === null) return { requirement: raw.trim() }
+  return { skill: m[1], requirement: raw.slice(m[0].length).trim() }
+}
+
 function statusLabel(card: KanbanCard, t: (key: string) => string): string {
   if (card.status === 'error') {
     switch (card.error?.kind) {
@@ -264,6 +274,7 @@ function CardView({ card, t, onToggle }: CardViewProps): JSX.Element {
       <div className="kb-card-meta">
         <span className="kb-card-badge">{badge}</span>
         {phaseInfo !== '' && <span className="kb-card-phase">{phaseInfo}</span>}
+        {card.skill !== undefined && card.skill !== '' && <span className="kb-card-skill">/ {card.skill}</span>}
         {card.model !== '' && <span className="kb-card-model">{card.model}</span>}
       </div>
       {card.status === 'error' && card.error !== undefined && (
@@ -317,15 +328,18 @@ function NewTaskModal({ t, workspaces, selectedPath, onClose, onCreated, onError
       onError(t('noWorkspace'))
       return
     }
+    const parsed = parseSkillGesture(requirement)
     setBusy(true)
     try {
-      await api.create(project, requirement.trim(), model, modelProvider)
+      await api.create(project, parsed.requirement, model, modelProvider, parsed.skill)
       onCreated()
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error))
       setBusy(false)
     }
   }
+
+  const activeSkill = parseSkillGesture(requirement).skill
 
   return (
     <div className="kb-modal-backdrop" onClick={busy ? undefined : onClose}>
@@ -339,6 +353,11 @@ function NewTaskModal({ t, workspaces, selectedPath, onClose, onCreated, onError
             placeholder={t('requirementPlaceholder')}
             onChange={(e) => setRequirement(e.target.value)}
           />
+          {activeSkill !== undefined ? (
+            <span className="kb-field-hint kb-field-hint-skill">{t('skillHint', { skill: activeSkill })}</span>
+          ) : (
+            <span className="kb-field-hint">{t('skillGestureHint')}</span>
+          )}
         </label>
         <label className="kb-field">
           <span>{t('project')}</span>
@@ -419,6 +438,9 @@ function DetailPanel({ card, t, onClose, onChanged, onToast, onOpenSession }: De
       <div className="kb-detail-panel-body">
         <div className="kb-detail-section">
           <div className="kb-detail-label">{t('requirement')}</div>
+          {card.skill !== undefined && card.skill !== '' && (
+            <div className="kb-detail-skill">{t('skillBadge', { skill: card.skill })}</div>
+          )}
           <div className="kb-detail-text">{card.requirement}</div>
         </div>
 

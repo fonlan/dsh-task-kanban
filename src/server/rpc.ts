@@ -131,7 +131,8 @@ export function registerApiRoutes(
     const requirement = requireString(p.requirement, 'requirement')
     const model = typeof p.model === 'string' ? p.model : ''
     const provider = typeof p.provider === 'string' ? p.provider : undefined
-    return runner.createTask({ workspacePath, requirement, model, provider })
+    const skill = typeof p.skill === 'string' && p.skill !== '' ? p.skill : undefined
+    return runner.createTask({ workspacePath, requirement, model, provider, ...(skill !== undefined ? { skill } : {}) })
   })
 
   route('move', async (p) => {

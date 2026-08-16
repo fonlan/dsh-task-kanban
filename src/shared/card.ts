@@ -73,6 +73,8 @@ export interface KanbanCard {
   id: string
   workspacePath: string
   requirement: string
+  /** Optional skill (e.g. `grill-me`) used to drive requirement refinement. */
+  skill?: string
   model: string
   /** Provider route for the model (from the modal selection). */
   provider?: string

@@ -18,6 +18,30 @@ ${workspacePath}
 5. 不要向用户提问，自主决策。`
 }
 
+/**
+ * Interactive refinement prompt for a card created with a skill (e.g.
+ * `/grill-me`). The refinement session is explicit — the user can reply —
+ * so instead of deciding autonomously, the agent follows the skill's
+ * interview and asks whatever it needs before writing the plan back.
+ */
+export function interactiveRefinementPrompt(requirement: string, workspacePath: string): string {
+  return `你是一个需求分析师。请分析下面的需求，并为它在指定项目中的实现制定一个可执行的分阶段实现计划。
+
+【需求】
+${requirement}
+
+【项目目录】
+${workspacePath}
+
+【要求】
+1. 先浏览项目目录了解现状（阅读 README、关键源码与文档；本会话只做只读探索，不要修改任何文件）。
+2. 这是一个显式会话，可以且应该与用户交流：按上方 Skill 的指引对需求进行充分打磨，通过提问澄清需求中模糊、缺失或相互矛盾的地方，直到需求足够明确。
+3. 需求打磨完成后，把需求拆解为按顺序串行执行的实现阶段（phase）。简单需求 1 个 phase 即可；复杂需求拆多个 phase，每个 phase 必须是独立的、可串行执行的实现单元，后面的 phase 依赖前面 phase 的产出。
+4. 每个 phase 必须包含：id（如 p1/p2/p3）、标题、目标（goal，说明该 phase 要交付什么）。
+5. 完成后调用 kanban_write_plan 工具把完整计划写回（title、summary、phases）。这是唯一写回方式，不要把计划 JSON 直接输出到对话里。
+6. 用户回复前不要擅自调用 kanban_write_plan；也不要因为用户暂时没有回复就放弃，等待用户回答即可。`
+}
+
 /** Phase implementation session prompt; identical on retries (the model reads git status/diff itself). */
 export function phasePrompt(card: KanbanCard, phaseIndex: number, workdir: string): string {
   const plan = card.plan!

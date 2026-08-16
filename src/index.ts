@@ -15,7 +15,7 @@ import { registerApiRoutes } from './server/rpc.js'
 
 export const name = '@fonlan/dsh-task-kanban'
 
-export const inject = ['webServer', 'agents']
+export const inject = ['webServer', 'agents', 'skills']
 
 export const Config = z.object({})
 

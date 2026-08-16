@@ -67,6 +67,7 @@ export class TaskStore {
     requirement: string
     model: string
     provider?: string
+    skill?: string
     status?: KanbanCard['status']
   }): Promise<KanbanCard> {
     const id = randomUUID()
@@ -77,6 +78,7 @@ export class TaskStore {
       requirement: input.requirement,
       model: input.model,
       ...(input.provider !== undefined ? { provider: input.provider } : {}),
+      ...(input.skill !== undefined && input.skill !== '' ? { skill: input.skill } : {}),
       status: input.status ?? 'draft',
       currentPhase: 0,
       phaseCount: 0,
