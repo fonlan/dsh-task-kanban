@@ -1,0 +1,361 @@
+/* @fonlan/dsh-task-kanban board styles (kb- prefixed, plain CSS) */
+.kb-board {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 12px 16px;
+  overflow: hidden;
+  color: var(--dsh-fg, #e6e6e6);
+  background: var(--dsh-bg, #141418);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+.kb-empty {
+  align-items: center;
+  justify-content: center;
+}
+.kb-empty-text { opacity: 0.6; }
+.kb-board-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+  flex: 0 0 auto;
+}
+.kb-board-actions { display: flex; gap: 8px; align-items: center; flex: none; }
+.kb-board-actions .kb-btn { flex: none; }
+.kb-ws-select {
+  max-width: 320px;
+  min-width: 0;
+  flex: 0 1 auto;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  background: rgba(128, 128, 128, 0.12);
+  color: inherit;
+  font-size: 14px;
+}
+.kb-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  background: rgba(128, 128, 128, 0.12);
+  color: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.kb-btn:hover { background: rgba(128, 128, 128, 0.22); }
+.kb-btn:disabled { opacity: 0.5; cursor: default; }
+.kb-btn-primary { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+.kb-btn-primary:hover { background: #2f6fe0; }
+.kb-btn-danger { background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.5); color: #f87171; }
+.kb-btn-small { padding: 2px 8px; font-size: 12px; }
+.kb-lanes {
+  flex: 1 1 auto;
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-top: 10px;
+  min-height: 0;
+}
+.kb-lane {
+  flex: 1 1 0;
+  min-width: 220px;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  background: rgba(128, 128, 128, 0.07);
+  border-radius: 8px;
+  border: 1px solid rgba(128, 128, 128, 0.12);
+  overflow: hidden;
+}
+.kb-lane-drop { border-style: dashed; border-color: rgba(59, 130, 246, 0.45); }
+.kb-lane-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--dsh-fg-soft, #b8b8c0);
+  border-bottom: 1px solid rgba(128, 128, 128, 0.12);
+  flex: 0 0 auto;
+}
+.kb-lane-count {
+  background: rgba(128, 128, 128, 0.18);
+  border-radius: 10px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+.kb-lane-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.kb-card {
+  background: rgba(128, 128, 128, 0.1);
+  border: 1px solid rgba(128, 128, 128, 0.2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  user-select: none;
+}
+.kb-card:hover { border-color: rgba(128, 128, 128, 0.45); }
+.kb-card[draggable='true'] { cursor: grab; }
+.kb-card-running { border-color: rgba(59, 130, 246, 0.6); }
+.kb-card-error { border-color: rgba(239, 68, 68, 0.6); }
+.kb-card-title { font-weight: 600; font-size: 13px; margin-bottom: 6px; word-break: break-all; }
+.kb-card-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+.kb-card-badge {
+  background: rgba(128, 128, 128, 0.2);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.kb-card-running .kb-card-badge { background: rgba(59, 130, 246, 0.3); }
+.kb-card-error .kb-card-badge { background: rgba(239, 68, 68, 0.3); }
+.kb-card-phase { opacity: 0.8; }
+.kb-card-model { opacity: 0.55; }
+.kb-card-error-text { margin-top: 6px; font-size: 12px; color: #f87171; word-break: break-all; }
+.kb-card-worktree { margin-top: 4px; font-size: 11px; opacity: 0.5; word-break: break-all; }
+.kb-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  background: rgba(30, 30, 36, 0.95);
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  color: #eee;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  z-index: 2147483000;
+  max-width: 70vw;
+}
+.kb-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2147482900;
+}
+.kb-modal {
+  width: 460px;
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow-y: auto;
+  background: #1c1c22;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 12px;
+  padding: 18px;
+  color: #e6e6e6;
+}
+.kb-modal-wide { width: 640px; }
+/* Task-detail bottom panel: docks at the bottom of the board page, fills the
+   full board width and exactly half of the board height (the lanes column
+   above flexes to the remaining space). */
+.kb-detail-panel {
+  flex: 0 0 50%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-top: 10px;
+  background: #1c1c22;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 12px;
+  overflow: hidden;
+  color: #e6e6e6;
+}
+.kb-detail-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+  flex: 0 0 auto;
+}
+.kb-detail-panel-head .kb-modal-title { margin-bottom: 0; }
+.kb-detail-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+}
+.kb-detail-close {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0.75;
+  cursor: pointer;
+}
+.kb-detail-close:hover { background: rgba(128, 128, 128, 0.18); opacity: 1; }
+.kb-modal-title { font-size: 16px; font-weight: 700; margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
+.kb-field { display: block; margin-bottom: 12px; }
+.kb-field > span { display: block; font-size: 12px; opacity: 0.75; margin-bottom: 4px; }
+.kb-field-row { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.kb-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  background: rgba(128, 128, 128, 0.1);
+  color: inherit;
+  font-size: 13px;
+}
+.kb-input-number { width: 90px; }
+.kb-textarea { min-height: 110px; resize: vertical; font-family: inherit; }
+.kb-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.kb-detail-section { margin-bottom: 12px; }
+.kb-detail-label { font-size: 12px; opacity: 0.65; margin-bottom: 4px; }
+.kb-detail-text { white-space: pre-wrap; word-break: break-all; font-size: 13px; }
+.kb-detail-error .kb-detail-text { color: #f87171; }
+.kb-detail-status {
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+  padding: 1px 8px;
+  background: rgba(128, 128, 128, 0.2);
+}
+.kb-status-running, .kb-status-merging { background: rgba(59, 130, 246, 0.3) !important; }
+.kb-status-error { background: rgba(239, 68, 68, 0.3) !important; color: #f87171; }
+.kb-status-merged { background: rgba(34, 197, 94, 0.3) !important; }
+.kb-plan-summary { font-size: 13px; margin-bottom: 10px; }
+.kb-plan-phases { margin: 0; padding-left: 20px; }
+.kb-plan-phase { margin-bottom: 10px; }
+.kb-plan-phase-current .kb-plan-phase-title { color: #60a5fa; }
+.kb-plan-phase-head { display: flex; gap: 8px; align-items: baseline; }
+.kb-plan-phase-title { font-weight: 600; font-size: 13px; }
+.kb-plan-phase-id { font-size: 11px; opacity: 0.5; }
+.kb-plan-phase-goal { font-size: 12px; opacity: 0.85; margin: 2px 0 6px; white-space: pre-wrap; }
+.kb-session-links { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.kb-session-attempt { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.kb-session-summary { font-size: 12px; opacity: 0.75; }
+.kb-settings { display: flex; flex-direction: column; gap: 12px; max-width: 420px; }
+.kb-settings-saved { font-size: 12px; color: #4ade80; }
+.kb-footer-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  /* same foreground as the settings trigger (its trigger css uses this var) */
+  color: var(--dsw-alias-label-primary, inherit);
+  cursor: pointer;
+}
+.kb-footer-action:hover { background: rgba(128, 128, 128, 0.18); }
+.kb-footer-action-active { background: rgba(59, 130, 246, 0.25); }
+/* Wide mode borrows the settings trigger's metrics (34px tall, 14px label,
+   18px icon) so both controls read as siblings on the same line. */
+.kb-footer-action-wide {
+  width: auto;
+  height: 34px;
+  padding: 0 8px;
+  border-radius: 12px;
+  font-size: 14px;
+}
+.kb-footer-action-wide .kb-footer-label {
+  font-size: 14px;
+  line-height: 22px;
+}
+@media (prefers-color-scheme: light) {
+  .kb-board { color: #1c1c22; background: #f5f5f7; }
+  .kb-modal { background: #ffffff; color: #1c1c22; }
+  .kb-detail-panel { background: #ffffff; color: #1c1c22; }
+}
+/* Same-line placement WITHOUT moving any DOM: the sidebar foot area becomes
+   a reversed flex row, so its LAST child (the settings area) renders on the
+   LEFT and the FIRST child (footer actions = the kanban button) on the RIGHT
+   — exactly "settings, then kanban". The settings trigger flexes to fill the
+   remaining width; the button keeps its content width. */
+.kb-foot-row {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: stretch;
+  gap: 4px;
+}
+.kb-foot-row > div:first-child {
+  flex: none;
+  width: auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+.kb-foot-row > div:last-child {
+  flex: 1;
+  min-width: 0;
+}
+/* Rail (collapsed sidebar): column-reverse stacks the settings circle on top
+   and the kanban icon below it, both centered; the kanban button borrows the
+   settings trigger's rail chrome (36px circle) so the two match. */
+.kb-foot-rail {
+  flex-direction: column-reverse;
+  align-items: center;
+}
+.kb-foot-rail .kb-footer-action {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  margin: 8px 0 10px;
+}
+.kb-footer-label {
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Narrow screens (mobile drawer / auto-collapse breakpoint): the drawer's
+   foot area is ~256-280px but the footer actions row carries the kanban
+   button PLUS mobile-nav's drawer actions (Files / session log), which
+   together exceed the row and squeeze the settings trigger to zero width
+   (row-reverse overflows left, clipping the button). Below the shell's
+   auto-collapse breakpoint, stack the settings row above the actions and
+   let the actions wrap so nothing is squeezed or clipped. */
+@media (max-width: 1023px) {
+  .kb-foot-row {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .kb-foot-row > div:first-child {
+    flex: none;
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 4px;
+    padding-top: 4px;
+  }
+  .kb-foot-row > div:last-child {
+    flex: none;
+    width: 100%;
+  }
+  /* The footer-actions entries are display:contents wrappers, so the kanban
+     button itself is a flex item of the wrapping actions row; pull it to the
+     first wrap position so it sits directly below the settings row (the
+     mobile-nav drawer actions follow on their own wrapped line). */
+  .kb-foot-row .kb-footer-action {
+    order: -1;
+  }
+}

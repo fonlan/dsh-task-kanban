@@ -1,0 +1,3 @@
+- insert:
+    - id: task-kanban
+      name: '@fonlan/dsh-task-kanban'
