@@ -225,6 +225,41 @@
   opacity: 0.9;
   color: #a78bfa;
 }
+.kb-skill-menu-wrap { position: relative; }
+.kb-skill-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 2px 0 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 180px;
+  overflow-y: auto;
+  border-radius: 8px;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  background: rgba(28, 28, 34, 0.97);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+.kb-skill-menu-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.kb-skill-menu-item-active { background: rgba(139, 92, 246, 0.25); }
+.kb-skill-menu-name { font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.kb-skill-menu-desc {
+  opacity: 0.7;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .kb-field-row { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
 .kb-input {
   width: 100%;

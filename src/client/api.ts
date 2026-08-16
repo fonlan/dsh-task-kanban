@@ -28,6 +28,47 @@ async function call<T>(method: string, payload: Record<string, unknown> = {}): P
   return parsed.value as T
 }
 
+/** One row of the host `skill.list` catalog (same shape DSH's chat autocomplete uses). */
+export interface SkillOption {
+  name: string
+  description: string
+  whenToUse?: string
+  modelInvocable: boolean
+}
+
+/**
+ * Call the host gateway's `skill.list` unary RPC over the same-origin HTTP
+ * bridge (the exact wire shape DSH's chat input uses for its /-autocomplete).
+ * The requested `sessionId` scopes the catalog to that session's agent
+ * preset, which is where the filesystem skill roots are registered.
+ */
+export async function gatewaySkillList(sessionId: string): Promise<SkillOption[]> {
+  let response: Response
+  try {
+    response = await fetch('/api/skill.list', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        type: 'client-request',
+        rpcId: `task-kanban-${Math.random().toString(36).slice(2)}`,
+        method: 'skill.list',
+        payload: { sessionId },
+      }),
+    })
+  } catch (error) {
+    throw new KanbanApiError('network', error instanceof Error ? error.message : String(error))
+  }
+  const parsed: { type?: string; result?: { ok?: boolean; value?: { skills?: SkillOption[] }; error?: { code?: string; message?: string } } } | null
+    = await response.json().catch(() => null)
+  if (!response.ok || parsed === null || parsed.type !== 'server-response' || parsed.result?.ok !== true) {
+    throw new KanbanApiError(
+      parsed?.result?.error?.code ?? 'http',
+      parsed?.result?.error?.message ?? `HTTP ${response.status}`,
+    )
+  }
+  return parsed.result.value?.skills ?? []
+}
+
 export const api = {
   list: (workspacePath: string) => call<KanbanCard[]>('list', { workspacePath }),
   create: (workspacePath: string, requirement: string, model: string, provider?: string, skill?: string) =>

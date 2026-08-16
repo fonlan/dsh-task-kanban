@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { KanbanCard, Lane } from '../shared/card'
 import { DROP_RULES, laneOf } from '../shared/lanes'
-import { api } from './api'
+import { api, gatewaySkillList, type SkillOption } from './api'
 import { exitBoard, getClient } from './kanban-state'
 import { en, zh } from './locales'
 import './board.css'
@@ -9,6 +9,12 @@ import './board.css'
 interface BoardProps {
   t?: (key: string, params?: Record<string, unknown>) => string
   useWorkspaces?: (selector: (state: unknown) => unknown) => unknown
+  useSessions?: (selector: (state: unknown) => unknown) => unknown
+}
+
+/** Session-list snapshot shape the standard `useSessions` feed carries. */
+interface SessionListStateLike {
+  current?: string
 }
 
 function firstLine(text: string): string {
@@ -74,6 +80,9 @@ export function BoardRoot(props: BoardProps): JSX.Element {
   const useWorkspaces = props.useWorkspaces
   const wsState = useWorkspaces !== undefined ? (useWorkspaces((s: unknown) => s) as { items?: WorkspaceRow[] } | undefined) : undefined
   const items: WorkspaceRow[] = wsState?.items ?? []
+  const useSessions = props.useSessions
+  const sessionState = useSessions !== undefined ? (useSessions((s: unknown) => s) as SessionListStateLike | undefined) : undefined
+  const currentSessionId = sessionState?.current
 
   const [selectedPath, setSelectedPath] = useState<string>(() => {
     try {
@@ -221,6 +230,7 @@ export function BoardRoot(props: BoardProps): JSX.Element {
           t={t}
           workspaces={items}
           selectedPath={selectedPath}
+          sessionId={currentSessionId}
           onClose={() => setNewTaskOpen(false)}
           onCreated={() => {
             setNewTaskOpen(false)
@@ -291,18 +301,27 @@ interface NewTaskModalProps {
   t: (key: string, params?: Record<string, unknown>) => string
   workspaces: WorkspaceRow[]
   selectedPath: string
+  /** Current session id, scoping the host skill.list catalog lookup. */
+  sessionId?: string
   onClose: () => void
   onCreated: () => void
   onError: (message: string) => void
 }
 
-function NewTaskModal({ t, workspaces, selectedPath, onClose, onCreated, onError }: NewTaskModalProps): JSX.Element {
+/** An in-progress leading `/query` token (menu-open state). */
+const SKILL_MENU_RE = /^\s*\/([a-z0-9-]*)$/
+
+function NewTaskModal({ t, workspaces, selectedPath, sessionId, onClose, onCreated, onError }: NewTaskModalProps): JSX.Element {
   const [requirement, setRequirement] = useState('')
   const [project, setProject] = useState(selectedPath)
   const [model, setModel] = useState('')
   const [modelProvider, setModelProvider] = useState('')
   const [models, setModels] = useState<Array<{ provider: string; id: string; name?: string }>>([])
+  const [skills, setSkills] = useState<SkillOption[]>([])
+  const [menuQuery, setMenuQuery] = useState<string | null>(null)
+  const [menuIndex, setMenuIndex] = useState(0)
   const [busy, setBusy] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -318,6 +337,73 @@ function NewTaskModal({ t, workspaces, selectedPath, onClose, onCreated, onError
       .catch(() => undefined)
     return () => { alive = false }
   }, [])
+
+  // Load the host skill catalog once (scoped to the current session), the
+  // same feed DSH's chat input uses for its /-autocomplete.
+  useEffect(() => {
+    if (sessionId === undefined) return
+    let alive = true
+    gatewaySkillList(sessionId)
+      .then((list) => { if (alive) setSkills(list) })
+      .catch(() => { if (alive) setSkills([]) })
+    return () => { alive = false }
+  }, [sessionId])
+
+  const matches = skills.filter((s) => s.name.startsWith(menuQuery ?? ''))
+  const menuVisible = menuQuery !== null && matches.length > 0
+  const selected = menuVisible ? matches[Math.min(menuIndex, matches.length - 1)] : undefined
+
+  /** Re-evaluate the leading-token menu state from the current value + caret. */
+  const syncMenu = (value: string, caret: number): void => {
+    const head = value.slice(0, caret)
+    const m = SKILL_MENU_RE.exec(head)
+    if (m !== null) {
+      setMenuQuery(m[1])
+      setMenuIndex(0)
+      return
+    }
+    setMenuQuery(null)
+  }
+
+  const selectSkill = (name: string): void => {
+    const el = textareaRef.current
+    const caret = el?.selectionStart ?? requirement.length
+    const head = requirement.slice(0, caret)
+    const m = SKILL_MENU_RE.exec(head)
+    // Replace the leading `/query` token with `/name `.
+    const inserted = `/${name} `
+    const newValue = m !== null ? inserted + requirement.slice(caret) : inserted + requirement
+    setRequirement(newValue)
+    setMenuQuery(null)
+    requestAnimationFrame(() => {
+      const next = textareaRef.current
+      if (next !== null) {
+        next.focus()
+        const pos = inserted.length
+        next.setSelectionRange(pos, pos)
+      }
+    })
+  }
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (!menuVisible) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setMenuIndex((i) => (i + 1) % matches.length)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setMenuIndex((i) => (i - 1 + matches.length) % matches.length)
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (selected !== undefined) selectSkill(selected.name)
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      setMenuQuery(null)
+    } else if (e.key === 'Tab') {
+      e.preventDefault()
+      if (selected !== undefined) selectSkill(selected.name)
+    }
+  }
 
   const submit = async (): Promise<void> => {
     if (requirement.trim() === '') {
@@ -347,12 +433,39 @@ function NewTaskModal({ t, workspaces, selectedPath, onClose, onCreated, onError
         <div className="kb-modal-title">{t('newTask')}</div>
         <label className="kb-field">
           <span>{t('requirementLabel')}</span>
-          <textarea
-            className="kb-input kb-textarea"
-            value={requirement}
-            placeholder={t('requirementPlaceholder')}
-            onChange={(e) => setRequirement(e.target.value)}
-          />
+          <div className="kb-skill-menu-wrap">
+            <textarea
+              ref={textareaRef}
+              className="kb-input kb-textarea"
+              value={requirement}
+              placeholder={t('requirementPlaceholder')}
+              onChange={(e) => {
+                const value = e.target.value
+                setRequirement(value)
+                syncMenu(value, e.target.selectionStart ?? value.length)
+              }}
+              onKeyDown={onKeyDown}
+            />
+            {menuVisible && (
+              <ul className="kb-skill-menu" role="listbox">
+                {matches.map((s, i) => (
+                  <li
+                    key={s.name}
+                    role="option"
+                    aria-selected={i === menuIndex}
+                    className={'kb-skill-menu-item' + (i === menuIndex ? ' kb-skill-menu-item-active' : '')}
+                    onMouseDown={(e) => { e.preventDefault(); selectSkill(s.name) }}
+                    onMouseEnter={() => setMenuIndex(i)}
+                  >
+                    <span className="kb-skill-menu-name">/{s.name}</span>
+                    <span className="kb-skill-menu-desc">
+                      {s.modelInvocable ? s.description : `${t('skillMenuUserOnly')} · ${s.description}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           {activeSkill !== undefined ? (
             <span className="kb-field-hint kb-field-hint-skill">{t('skillHint', { skill: activeSkill })}</span>
           ) : (
