@@ -49,6 +49,11 @@ export class KanbanRunner implements KanbanToolResolver {
   private merging = new Set<string>()
   /** Retained agent handles (kept so ended sessions stay in the store/UI). */
   private handles = new Map<string, AgentHandle[]>()
+  /** Whether startup recovery + session indexing ran (deferred until workspaces exist). */
+  private recovered = false
+  /** Agents that already got their scoped kanban tools (event idempotency). */
+  private toolScopedAgents = new WeakSet<object>()
+  private agentStartOff: (() => void) | undefined
 
   constructor(ctx: Context, store: TaskStore, settings: KanbanSettingsFace) {
     this.ctx = ctx
@@ -62,10 +67,22 @@ export class KanbanRunner implements KanbanToolResolver {
 
   start(): void {
     this.pumpTimer = setInterval(() => { void this.pump() }, 2500)
+    // `agent/session-start` fires for BOTH agents.create (startup) and
+    // agents.resume (host re-open after a restart). Kanban tools are scoped
+    // per agent, so a resumed refinement/phase/merge session would otherwise
+    // lose them — register there instead of only in createAgent's setup.
+    this.agentStartOff = this.ctx.on('agent/session-start', (payload: { agent?: { id?: string; ctx?: Context } }) => {
+      void this.onAgentSessionStart(payload.agent)
+    })
   }
 
   stop(): void {
     if (this.pumpTimer !== undefined) clearInterval(this.pumpTimer)
+    this.pumpTimer = undefined
+    if (this.agentStartOff !== undefined) {
+      this.agentStartOff()
+      this.agentStartOff = undefined
+    }
   }
 
   private newSessionId(): SessionId {
@@ -154,6 +171,63 @@ export class KanbanRunner implements KanbanToolResolver {
           }, ws.path)
         }
       }
+    }
+  }
+
+  /**
+   * Rebuild sessionId → cardId from the task store. Runs once the workspace
+   * registry is available (see pump), so kanban sessions resumed after a
+   * restart still resolve their card.
+   */
+  private async indexSessions(): Promise<void> {
+    for (const ws of await this.workspaceList()) {
+      const cards = await this.store.list(ws.path)
+      for (const card of cards) this.mapCardSessions(card.id, card)
+    }
+  }
+
+  private mapCardSessions(cardId: string, card: KanbanCard): void {
+    for (const sid of card.sessions.refinement) this.sessionCards.set(sid, cardId)
+    for (const attempt of card.sessions.phases) this.sessionCards.set(attempt.sessionId, cardId)
+    for (const sid of card.sessions.merge) this.sessionCards.set(sid, cardId)
+  }
+
+  /** Fallback lookup when a session starts before indexSessions ran. */
+  private async lookupCardOfSession(sessionId: string): Promise<string | undefined> {
+    for (const ws of await this.workspaceList()) {
+      const cards = await this.store.list(ws.path)
+      for (const card of cards) {
+        const hit =
+          card.sessions.refinement.includes(sessionId) ||
+          card.sessions.phases.some((a) => a.sessionId === sessionId) ||
+          card.sessions.merge.includes(sessionId)
+        if (hit) {
+          this.mapCardSessions(card.id, card)
+          return card.id
+        }
+      }
+    }
+    return undefined
+  }
+
+  /**
+   * The single place kanban tools get registered. `agent/session-start` fires
+   * for BOTH `agents.create` (startup) and `agents.resume` (host re-open after
+   * a restart), so a resumed refinement/phase/merge session keeps its scoped
+   * tools. Idempotent per agent object; non-kanban sessions are skipped.
+   */
+  private async onAgentSessionStart(agent: { id?: string; ctx?: Context } | undefined): Promise<void> {
+    if (agent === undefined || agent.id === undefined || agent.ctx === undefined) return
+    if (this.toolScopedAgents.has(agent)) return
+    let cardId = this.sessionCards.get(agent.id)
+    if (cardId === undefined) cardId = await this.lookupCardOfSession(agent.id)
+    if (cardId === undefined) return
+    this.sessionCards.set(agent.id, cardId)
+    try {
+      registerKanbanTools(agent.ctx, this.toolResolver())
+      this.toolScopedAgents.add(agent)
+    } catch (error) {
+      console.error('[task-kanban] register kanban tools for ' + agent.id + ' failed:', String(error))
     }
   }
 
@@ -287,6 +361,26 @@ export class KanbanRunner implements KanbanToolResolver {
   }
 
   async pump(): Promise<void> {
+    // Recovery and session indexing need the workspace registry, which may
+    // not be populated when the plugin first applies (the old code silently
+    // no-opped and left interrupted cards stuck in refining). Retry on the
+    // pump tick until the first workspace appears.
+    if (!this.recovered) {
+      const ws = await this.workspaceList()
+      if (ws.length > 0) {
+        this.recovered = true
+        try {
+          await this.recoverInterrupted()
+        } catch (error) {
+          console.error('[task-kanban] recoverInterrupted failed:', String(error))
+        }
+        try {
+          await this.indexSessions()
+        } catch (error) {
+          console.error('[task-kanban] indexSessions failed:', String(error))
+        }
+      }
+    }
     if (this.slots >= this.maxParallel()) return
     const workspaces = await this.workspaceList()
     for (const ws of workspaces) {
@@ -340,7 +434,7 @@ export class KanbanRunner implements KanbanToolResolver {
       c.sessions.refinement.push(sessionId)
     }, wsPath)
     try {
-      const handle = await this.createAgent(sessionId, wsPath, route, this.toolResolver())
+      const handle = await this.createAgent(sessionId, wsPath, route)
       this.keepHandle(cardId, handle)
       await this.attachRefinementSession(wsPath, sessionId)
       // The agent scope is the layer where preset skill providers live
@@ -466,7 +560,6 @@ export class KanbanRunner implements KanbanToolResolver {
     sessionId: SessionId,
     cwd: string,
     route: { provider?: string; model?: string },
-    resolver: KanbanToolResolver,
   ) {
     const agentOptions =
       route.provider !== undefined && route.model !== undefined && route.model !== ''
@@ -476,6 +569,9 @@ export class KanbanRunner implements KanbanToolResolver {
       sessionId,
       meta: { cwd },
       ...(agentOptions !== undefined ? { agentOptions } : {}),
+      // Kanban tools are NOT registered here: `agent/session-start` (see
+      // start()) fires for both create and resume, keeping them available
+      // even when the host re-opens a persisted kanban session.
       setup: async (agentCtx) => {
         const agentPresets = agentCtx.get('agentPresets') as
           | { mount(agentCtx: unknown, id?: string): Promise<unknown> }
@@ -485,7 +581,6 @@ export class KanbanRunner implements KanbanToolResolver {
         } else {
           throw new Error('@fonlan/dsh-task-kanban: agent-presets service is not mounted')
         }
-        registerKanbanTools(agentCtx, resolver)
       },
     })
   }
@@ -638,7 +733,7 @@ export class KanbanRunner implements KanbanToolResolver {
     }, wsPath)
     const route = await this.modelRoute(cardId, wsPath)
     try {
-      const handle = await this.createAgent(sessionId, workdir, route, this.toolResolver())
+      const handle = await this.createAgent(sessionId, workdir, route)
       this.keepHandle(cardId, handle)
       entry.cancel = () => handle.agent.cancel({ kind: 'user' })
       handle.agent.followup(this.asUserMessage(phasePrompt({ ...(await this.store.get(wsPath, cardId)) ?? { plan } as KanbanCard, plan } as KanbanCard, phaseIndex, workdir)))
@@ -891,7 +986,7 @@ export class KanbanRunner implements KanbanToolResolver {
     await this.store.mutate(cardId, (c) => { c.sessions.merge.push(sessionId) }, wsPath)
     const route = await this.modelRoute(cardId, wsPath)
     try {
-      const handle = await this.createAgent(sessionId, workdir, route, this.toolResolver())
+      const handle = await this.createAgent(sessionId, workdir, route)
       this.keepHandle(cardId, handle)
       handle.agent.followup(this.asUserMessage(mergePrompt(workdir, conflicts)))
       await handle.agent.whenIdle()
