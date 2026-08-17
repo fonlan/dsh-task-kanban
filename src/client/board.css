@@ -21,14 +21,20 @@
 .kb-board-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding-bottom: 10px;
   border-bottom: 1px solid rgba(128, 128, 128, 0.25);
   flex: 0 0 auto;
 }
-.kb-board-actions { display: flex; gap: 8px; align-items: center; flex: none; }
-.kb-board-actions .kb-btn { flex: none; }
+/* Left-aligned group: workspace selector + new-task button sit adjacent. */
+.kb-board-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.kb-board-title .kb-btn { flex: none; }
 .kb-ws-select {
   max-width: 320px;
   min-width: 0;
@@ -302,16 +308,46 @@
 .kb-status-error { background: rgba(239, 68, 68, 0.3) !important; color: #f87171; }
 .kb-status-merged { background: rgba(34, 197, 94, 0.3) !important; }
 .kb-plan-summary { font-size: 13px; margin-bottom: 10px; }
-.kb-plan-phases { margin: 0; padding-left: 20px; }
-.kb-plan-phase { margin-bottom: 10px; }
-.kb-plan-phase-current .kb-plan-phase-title { color: #60a5fa; }
-.kb-plan-phase-head { display: flex; gap: 8px; align-items: baseline; }
+/* Phase cards: each plan phase is a card with an ordered number (kept from the
+   parent <ol>) and three labeled sections (goal / sessions / conclusion) split
+   by section titles and thin divider lines. */
+.kb-plan-phases { margin: 0; padding-left: 24px; }
+.kb-plan-phase {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  background: rgba(128, 128, 128, 0.08);
+  border: 1px solid rgba(128, 128, 128, 0.2);
+  border-radius: 8px;
+}
+.kb-plan-phase-head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.16);
+}
 .kb-plan-phase-title { font-weight: 600; font-size: 13px; }
 .kb-plan-phase-id { font-size: 11px; opacity: 0.5; }
-.kb-plan-phase-goal { font-size: 12px; opacity: 0.85; margin: 2px 0 6px; white-space: pre-wrap; }
+.kb-plan-phase-body { display: flex; flex-direction: column; }
+/* Section isolation: label on top, thin divider between adjacent sections. */
+.kb-plan-phase-section { display: flex; flex-direction: column; }
+.kb-plan-phase-section + .kb-plan-phase-section {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(128, 128, 128, 0.14);
+}
+.kb-plan-phase-section-title { font-size: 11px; opacity: 0.55; margin-bottom: 3px; }
+.kb-plan-phase-goal { font-size: 12px; opacity: 0.85; white-space: pre-wrap; word-break: break-all; }
+.kb-plan-phase-sessions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.kb-plan-phase-conclusion { font-size: 12px; opacity: 0.85; white-space: pre-wrap; word-break: break-all; }
+.kb-plan-phase-conclusion-item + .kb-plan-phase-conclusion-item { margin-top: 6px; }
+/* Running phase keeps the blue highlight; completed phases get success color. */
+.kb-plan-phase-current { border-color: rgba(59, 130, 246, 0.6); background: rgba(59, 130, 246, 0.08); }
+.kb-plan-phase-current .kb-plan-phase-title { color: #60a5fa; }
+.kb-plan-phase-completed { border-color: rgba(34, 197, 94, 0.45); background: rgba(34, 197, 94, 0.06); }
+.kb-plan-phase-completed .kb-plan-phase-title { color: #4ade80; }
 .kb-session-links { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.kb-session-attempt { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-.kb-session-summary { font-size: 12px; opacity: 0.75; }
 .kb-settings { display: flex; flex-direction: column; gap: 12px; max-width: 420px; }
 .kb-settings-saved { font-size: 12px; color: #4ade80; }
 .kb-footer-action {

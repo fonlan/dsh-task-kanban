@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { KanbanCard, Lane } from '../shared/card'
+import type { KanbanCard, Lane, PhaseAttempt, PlanPhase } from '../shared/card'
 import { DROP_RULES, laneOf } from '../shared/lanes'
 import { api, gatewaySkillList, type SkillOption } from './api'
 import { exitBoard, getClient } from './kanban-state'
@@ -189,8 +189,6 @@ export function BoardRoot(props: BoardProps): JSX.Element {
               <option key={w.workspaceId} value={w.path}>{w.title}</option>
             ))}
           </select>
-        </div>
-        <div className="kb-board-actions">
           <button type="button" className="kb-btn kb-btn-primary" onClick={() => setNewTaskOpen(true)}>{t('newTask')}</button>
         </div>
       </div>
@@ -564,14 +562,14 @@ function DetailPanel({ card, t, onClose, onChanged, onToast, onOpenSession }: De
               <div className="kb-plan-summary">{card.plan.summary}</div>
               <ol className="kb-plan-phases">
                 {card.plan.phases.map((phase, i) => (
-                  <li key={phase.id} className={'kb-plan-phase' + (i === card.currentPhase && card.status === 'running' ? ' kb-plan-phase-current' : '')}>
-                    <div className="kb-plan-phase-head">
-                      <span className="kb-plan-phase-title">{phase.title}</span>
-                      <span className="kb-plan-phase-id">{phase.id}</span>
-                    </div>
-                    <div className="kb-plan-phase-goal">{phase.goal}</div>
-                    <PhaseSessions phaseIndex={i} card={card} t={t} onOpenSession={onOpenSession} />
-                  </li>
+                  <PhaseCard
+                    key={phase.id}
+                    phase={phase}
+                    phaseIndex={i}
+                    card={card}
+                    t={t}
+                    onOpenSession={onOpenSession}
+                  />
                 ))}
               </ol>
             </div>
@@ -628,23 +626,68 @@ function DetailPanel({ card, t, onClose, onChanged, onToast, onOpenSession }: De
   )
 }
 
-function PhaseSessions({ phaseIndex, card, t, onOpenSession }: {
+/** One plan phase rendered as a card with goal / sessions / conclusion sections. */
+function PhaseCard({ phase, phaseIndex, card, t, onOpenSession }: {
+  phase: PlanPhase
   phaseIndex: number
   card: KanbanCard
+  t: (key: string, params?: Record<string, unknown>) => string
+  onOpenSession: (sessionId: string) => void
+}): JSX.Element {
+  const attempts = card.sessions.phases.filter((a) => a.phaseIndex === phaseIndex)
+  const summaries = attempts
+    .filter((a) => a.summary !== undefined && a.summary.trim() !== '')
+    .map((a) => a.summary as string)
+  const isCurrent = phaseIndex === card.currentPhase && card.status === 'running'
+  // A phase with at least one concluded attempt counts as completed.
+  const isCompleted = summaries.length > 0
+  const cls = 'kb-plan-phase'
+    + (isCurrent ? ' kb-plan-phase-current' : '')
+    + (isCompleted ? ' kb-plan-phase-completed' : '')
+  return (
+    <li className={cls}>
+      <div className="kb-plan-phase-head">
+        <span className="kb-plan-phase-title">{phase.title}</span>
+        <span className="kb-plan-phase-id">{phase.id}</span>
+      </div>
+      <div className="kb-plan-phase-body">
+        <div className="kb-plan-phase-section">
+          <div className="kb-plan-phase-section-title">{t('phaseGoal')}</div>
+          <div className="kb-plan-phase-goal">{phase.goal}</div>
+        </div>
+        {attempts.length > 0 && (
+          <div className="kb-plan-phase-section">
+            <div className="kb-plan-phase-section-title">{t('phaseSessions')}</div>
+            <PhaseSessions attempts={attempts} t={t} onOpenSession={onOpenSession} />
+          </div>
+        )}
+        {summaries.length > 0 && (
+          <div className="kb-plan-phase-section">
+            <div className="kb-plan-phase-section-title">{t('phaseConclusion')}</div>
+            <div className="kb-plan-phase-conclusion">
+              {summaries.map((s, idx) => (
+                <div key={idx} className="kb-plan-phase-conclusion-item">{s}</div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </li>
+  )
+}
+
+/** Open-session buttons for one phase's attempts (retries append more). */
+function PhaseSessions({ attempts, t, onOpenSession }: {
+  attempts: PhaseAttempt[]
   t: (key: string) => string
   onOpenSession: (sessionId: string) => void
-}): JSX.Element | null {
-  const attempts = card.sessions.phases.filter((a) => a.phaseIndex === phaseIndex)
-  if (attempts.length === 0) return null
+}): JSX.Element {
   return (
-    <div className="kb-session-links">
+    <div className="kb-plan-phase-sessions">
       {attempts.map((a) => (
-        <span key={a.sessionId} className="kb-session-attempt">
-          <button type="button" className="kb-btn kb-btn-small" onClick={() => onOpenSession(a.sessionId)}>
-            {t('openSession')} · {a.sessionId.slice(0, 13)}
-          </button>
-          {a.summary !== undefined && <span className="kb-session-summary">{a.summary}</span>}
-        </span>
+        <button key={a.sessionId} type="button" className="kb-btn kb-btn-small" onClick={() => onOpenSession(a.sessionId)}>
+          {t('openSession')} · {a.sessionId.slice(0, 13)}
+        </button>
       ))}
     </div>
   )
