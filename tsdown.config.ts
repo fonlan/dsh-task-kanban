@@ -11,6 +11,7 @@
  * else is inlined. CSS files are inlined as <style data-plugin> tags.
  */
 import { readFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { basename, dirname, relative, resolve as resolvePath, sep } from 'node:path'
 import { builtinModules, createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
@@ -49,7 +50,13 @@ const REPOSITORY_ROOT = fileURLToPath(new URL('.', import.meta.url))
 
 /** The style-injection prologue shared by css loads. */
 function injectTag(pluginId: string, fileId: string, cssText: string): string {
-  const tagId = `${pluginId}/${basename(fileId)}`
+  // Content-addressed tag id: the browser half of client-hmr hot-swaps a
+  // rebuilt bundle WITHOUT a full page reload, and the injection guard below
+  // skips tags it already saw. A stable id (pluginId + basename) would keep
+  // the FIRST loaded CSS forever — rebuilt styles would never apply until a
+  // hard refresh. Hashing the css text makes every rebuilt bundle inject its
+  // fresh CSS (the superseded tag stays in the DOM; the later tag wins).
+  const tagId = `${pluginId}/${basename(fileId)}#${createHash('sha1').update(cssText).digest('hex').slice(0, 8)}`
   return [
     `const css = ${JSON.stringify(cssText)};`,
     `const tagId = ${JSON.stringify(tagId)};`,
