@@ -48,7 +48,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.client.json",
     "bundle": "tsdown",
     "watch": "tsdown --watch",
-    "test": "vitest run"
+    "test": "vitest run",
+    "release:patch": "npm version patch && git push && git push --tags",
+    "release:minor": "npm version minor && git push && git push --tags",
+    "release:major": "npm version major && git push && git push --tags"
   },
   "dsh": {
     "bundle": {
