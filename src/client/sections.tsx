@@ -140,7 +140,7 @@ export function KanbanFooterButton({ wide, t }: FooterActionProps): JSX.Element 
   )
 }
 
-interface SettingsSectionProps {
+interface SettingsCardProps {
   t?: (key: string) => string
 }
 
@@ -247,9 +247,11 @@ function SessionDefaultsGroup({ kind, settings, models, presets, efforts, tr, on
   )
 }
 
-/** Plugin settings section: workers + default model + per-session-type defaults. */
-export function KanbanSettingsSection({ t }: SettingsSectionProps): JSX.Element {
+/** Plugin settings card (设置 → 插件配置): workers + default model + per-session-type defaults. */
+export function KanbanSettingsCard({ t }: SettingsCardProps): JSX.Element {
   const tr = t ?? ((key: string) => key)
+  // Card-local disclosure: collapsed by default, like the built-in plugin cards.
+  const [open, setOpen] = useState(false)
   const [settings, setSettings] = useState<KanbanSettingsShape>(EMPTY_SETTINGS)
   const [models, setModels] = useState<ModelOption[]>([])
   const [presets, setPresets] = useState<PresetOption[]>([])
@@ -337,43 +339,67 @@ export function KanbanSettingsSection({ t }: SettingsSectionProps): JSX.Element 
   }, [efforts])
 
   return (
-    <div className="kb-settings">
-      <label className="kb-field kb-field-row">
-        <span>{tr('maxParallelWorkers')}</span>
-        <input
-          className="kb-input kb-input-number"
-          type="number"
-          min={1}
-          step={1}
-          value={settings.maxParallelWorkers}
-          onChange={(e) => {
-            const value = Math.max(1, Math.floor(Number(e.target.value) || 1))
-            setSettings((s) => ({ ...s, maxParallelWorkers: value }))
-            void commit({ maxParallelWorkers: value })
-          }}
-        />
-      </label>
-      <SessionDefaultsGroup
-        kind="refinement"
-        settings={settings}
-        models={models}
-        presets={presets}
-        efforts={efforts}
-        tr={tr}
-        onCommit={commit}
-        loadEfforts={loadEfforts}
-      />
-      <SessionDefaultsGroup
-        kind="phase"
-        settings={settings}
-        models={models}
-        presets={presets}
-        efforts={efforts}
-        tr={tr}
-        onCommit={commit}
-        loadEfforts={loadEfforts}
-      />
-      {saved && <div className="kb-settings-saved">{tr('saved')}</div>}
-    </div>
+    <li className="kb-card" data-open={open ? '' : undefined}>
+      <button
+        type="button"
+        className="kb-card-head"
+        aria-expanded={open}
+        aria-label={(open ? tr('settingsCollapse') : tr('settingsExpand')) + '：' + tr('settingsTitle')}
+        onClick={() => setOpen(!open)}
+      >
+        <span className="kb-card-headText">
+          <span className="kb-card-title">{tr('settingsTitle')}</span>
+          <span className="kb-card-sub">{tr('settingsDescription')}</span>
+        </span>
+        <span className="kb-card-chevron" data-open={open ? '' : undefined} aria-hidden="true">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3.5 5.25L7 8.75L10.5 5.25" stroke="currentColor" strokeWidth="1.5"
+              strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+      </button>
+      {open && (
+        <div className="kb-card-body">
+          <div className="kb-settings">
+            <label className="kb-field kb-field-row">
+              <span>{tr('maxParallelWorkers')}</span>
+              <input
+                className="kb-input kb-input-number"
+                type="number"
+                min={1}
+                step={1}
+                value={settings.maxParallelWorkers}
+                onChange={(e) => {
+                  const value = Math.max(1, Math.floor(Number(e.target.value) || 1))
+                  setSettings((s) => ({ ...s, maxParallelWorkers: value }))
+                  void commit({ maxParallelWorkers: value })
+                }}
+              />
+            </label>
+            <SessionDefaultsGroup
+              kind="refinement"
+              settings={settings}
+              models={models}
+              presets={presets}
+              efforts={efforts}
+              tr={tr}
+              onCommit={commit}
+              loadEfforts={loadEfforts}
+            />
+            <SessionDefaultsGroup
+              kind="phase"
+              settings={settings}
+              models={models}
+              presets={presets}
+              efforts={efforts}
+              tr={tr}
+              onCommit={commit}
+              loadEfforts={loadEfforts}
+            />
+            {saved && <div className="kb-settings-saved">{tr('saved')}</div>}
+          </div>
+        </div>
+      )}
+    </li>
   )
 }

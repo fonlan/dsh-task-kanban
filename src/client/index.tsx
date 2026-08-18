@@ -2,9 +2,9 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
-import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import { BoardRoot } from './board'
-import { KanbanFooterButton, KanbanSettingsSection } from './sections'
+import { KanbanFooterButton, KanbanSettingsCard } from './sections'
 import { LOCALE_NS, zh, en } from './locales'
 import { setClient, setBoardRoot, bindSessionNavigation } from './kanban-state'
 
@@ -35,13 +35,15 @@ export function apply(ctx: ClientContext): void {
     }, KanbanFooterButton as never),
   )
 
-  ctx.slots.inject('settings.section', () =>
+  // The plugin's own Settings Card (设置 → 插件配置) rides the `task-kanban`
+  // settings namespace: registering into the keyed `settings.plugin.item` slot
+  // with the namespace string makes the configurable-plugins tab dispatch the
+  // card next to the built-in ones (bash / agent loop / web search).
+  ctx.slots.inject('settings.plugin.item', () =>
     ctx.slots.register({
-      name: 'settings.section',
-      id: 'task-kanban',
-      order: 200,
-      label: () => t('settingsTitle'),
+      name: 'settings.plugin.item',
+      key: 'task-kanban',
       locale: LOCALE_NS,
-    }, KanbanSettingsSection as never),
+    }, KanbanSettingsCard as never),
   )
 }
