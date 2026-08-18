@@ -1,6 +1,6 @@
 {
   "name": "@fonlan/dsh-task-kanban",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "DSH web plugin: a task kanban that refines requirements into phased plans, auto-executes them in git worktrees (one session per phase), and auto-merges into the main branch on completion.",
   "license": "MIT",
   "repository": {
