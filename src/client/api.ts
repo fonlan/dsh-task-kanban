@@ -69,6 +69,21 @@ export async function gatewaySkillList(sessionId: string): Promise<SkillOption[]
   return parsed.result.value?.skills ?? []
 }
 
+/** One row of the host `agentPresets.list()` roster. */
+export interface PresetOption {
+  id: string
+  name?: string
+  description?: string
+}
+
+/** Reasoning efforts of one provider/model route (`reasoning.options`). */
+export interface ReasoningOptions {
+  efforts: Array<{ id: string; name: string; description?: string }>
+  defaultEffort?: string
+  /** Client-side marker: the fetch failed; the stored effort must be kept. */
+  failed?: boolean
+}
+
 export const api = {
   list: (workspacePath: string) => call<KanbanCard[]>('list', { workspacePath }),
   create: (workspacePath: string, requirement: string, model: string, provider?: string, skill?: string) =>
@@ -80,4 +95,7 @@ export const api = {
   settingsGet: () => call<KanbanSettingsShape>('settings.get'),
   settingsSet: (patch: Partial<KanbanSettingsShape>) => call<KanbanSettingsShape>('settings.set', patch),
   models: () => call<ModelOption[]>('models.list'),
+  presets: () => call<PresetOption[]>('presets.list'),
+  reasoningOptions: (provider: string, model: string) =>
+    call<ReasoningOptions>('reasoning.options', { provider, model }),
 }

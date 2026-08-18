@@ -10,9 +10,9 @@ import { appendFile, readFile } from 'node:fs/promises'
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { AgentHandle } from '@deepseek-ai/dsh-agent'
-import type { KanbanCard, ErrorKind, Lane, Plan } from '../shared/card.js'
+import { createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import { installModelSelection, type AgentHandle, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
+import type { KanbanCard, ErrorKind, KanbanSessionKind, Lane, Plan } from '../shared/card.js'
 import type { TaskStore } from './task-store.js'
 import type { KanbanSettingsFace } from './settings.js'
 import { currentBranch, detectBaseRef, hasStashMessage, isGitRepo, isTreeDirty, revParse, runGit, unmergedPaths } from './git.js'
@@ -425,7 +425,7 @@ export class KanbanRunner implements KanbanToolResolver {
   private async runRefinement(cardId: string, wsPath: string): Promise<void> {
     const card = await this.store.get(wsPath, cardId)
     if (card === undefined) return
-    const route = await this.modelRoute(cardId, wsPath)
+    const route = await this.modelRoute(cardId, wsPath, 'refine')
     const sessionId = this.newSessionId()
     this.sessionCards.set(sessionId, cardId)
     await this.store.mutate(cardId, (c) => {
@@ -434,7 +434,7 @@ export class KanbanRunner implements KanbanToolResolver {
       c.sessions.refinement.push(sessionId)
     }, wsPath)
     try {
-      const handle = await this.createAgent(sessionId, wsPath, route)
+      const handle = await this.createAgent(sessionId, wsPath, route, 'refine')
       this.keepHandle(cardId, handle)
       await this.attachRefinementSession(wsPath, sessionId)
       // The agent scope is the layer where preset skill providers live
@@ -556,18 +556,54 @@ export class KanbanRunner implements KanbanToolResolver {
     return { promise, dispose }
   }
 
+  /**
+   * Create one kanban session agent. `kind` decides the per-session preset:
+   * refine/phase use their settings default (falling back to the roster's
+   * default preset when unset), merge keeps the historical 'standard' preset.
+   * When the kind defaults configure a reasoning effort, an
+   * `installModelSelection` ref couples the provider/model + effort into every
+   * prompt assembly and model request. Without a configured effort no
+   * selection is installed: `agentOptions` carries the route and the loop
+   * materializes the model's own default effort — the historical behavior.
+   */
   private async createAgent(
     sessionId: SessionId,
     cwd: string,
-    route: { provider?: string; model?: string },
+    route: { provider?: string; model?: string; reasoningEffort?: string },
+    kind: KanbanSessionKind,
   ) {
     const agentOptions =
       route.provider !== undefined && route.model !== undefined && route.model !== ''
         ? { provider: route.provider, model: route.model }
         : undefined
+    const selectionRef: ModelSelectionRef = {
+      current:
+        route.provider !== undefined && route.model !== undefined && route.model !== ''
+          ? {
+              provider: route.provider,
+              model: route.model,
+              ...(route.reasoningEffort !== undefined && route.reasoningEffort !== ''
+                ? { reasoningEffort: ReasoningEffortId(route.reasoningEffort) }
+                : {}),
+            }
+          : undefined,
+      assembled: undefined,
+    }
+    // Resolve the preset id BEFORE creation so the session header records the
+    // exact composition it runs under (a resumed kanban session then rebuilds
+    // the same preset instead of the deployment default).
+    let presetId: string | undefined
+    const presets = this.ctx.get('agentPresets') as
+      | { resolve(id?: string): Promise<{ id: string }> }
+      | undefined
+    if (presets !== undefined) {
+      const requested = kind === 'merge' ? 'standard' : this.settings.sessionDefaults(kind).preset
+      const resolved = await presets.resolve(requested === '' ? undefined : requested)
+      presetId = resolved.id
+    }
     return this.ctx.agents.create({
       sessionId,
-      meta: { cwd },
+      meta: { cwd, ...(presetId !== undefined ? { agentPreset: presetId } : {}) },
       ...(agentOptions !== undefined ? { agentOptions } : {}),
       // Kanban tools are NOT registered here: `agent/session-start` (see
       // start()) fires for both create and resume, keeping them available
@@ -577,9 +613,12 @@ export class KanbanRunner implements KanbanToolResolver {
           | { mount(agentCtx: unknown, id?: string): Promise<unknown> }
           | undefined
         if (agentPresets !== undefined) {
-          await agentPresets.mount(agentCtx, 'standard')
+          await agentPresets.mount(agentCtx, presetId)
         } else {
           throw new Error('@fonlan/dsh-task-kanban: agent-presets service is not mounted')
+        }
+        if (selectionRef.current !== undefined && selectionRef.current.reasoningEffort !== undefined) {
+          installModelSelection(agentCtx, selectionRef)
         }
       },
     })
@@ -619,8 +658,19 @@ export class KanbanRunner implements KanbanToolResolver {
     return undefined
   }
 
-  /** Resolve the provider+model route for an agent (both are required). */
-  private async modelRoute(cardId: string, wsPath: string): Promise<{ provider?: string; model?: string }> {
+  /**
+   * Resolve the provider+model route for an agent (both are required), plus
+   * the per-kind reasoning effort. Precedence per kind:
+   *   1. the card's explicit model (chosen at creation) — wins for every kind;
+   *   2. the session-kind defaults (refine/phase settings);
+   *   3. the host `agent-default-model` route.
+   * Merge sessions skip step 2 (no per-type defaults for them).
+   */
+  private async modelRoute(
+    cardId: string,
+    wsPath: string,
+    kind: KanbanSessionKind,
+  ): Promise<{ provider?: string; model?: string; reasoningEffort?: string }> {
     const card = await this.store.get(wsPath, cardId)
     if (card === undefined) return {}
     if (card.model !== '' && card.provider !== undefined && card.provider !== '') {
@@ -630,10 +680,13 @@ export class KanbanRunner implements KanbanToolResolver {
       const fallback = this.settings.defaultModelRoute()
       return fallback.provider !== undefined ? { provider: fallback.provider, model: card.model } : { model: card.model }
     }
-    const userDefault = this.settings.get().defaultModel
-    if (userDefault !== '') {
-      const fallback = this.settings.defaultModelRoute()
-      return fallback.provider !== undefined ? { provider: fallback.provider, model: userDefault } : { model: userDefault }
+    const kindDefaults = this.settings.sessionDefaults(kind)
+    if (kindDefaults.model !== '') {
+      return {
+        ...(kindDefaults.provider !== '' ? { provider: kindDefaults.provider } : {}),
+        model: kindDefaults.model,
+        ...(kindDefaults.reasoningEffort !== '' ? { reasoningEffort: kindDefaults.reasoningEffort } : {}),
+      }
     }
     return this.settings.defaultModelRoute()
   }
@@ -731,9 +784,9 @@ export class KanbanRunner implements KanbanToolResolver {
       c.error = undefined
       c.sessions.phases.push({ phaseIndex, sessionId, startedAt: Date.now() })
     }, wsPath)
-    const route = await this.modelRoute(cardId, wsPath)
+    const route = await this.modelRoute(cardId, wsPath, 'phase')
     try {
-      const handle = await this.createAgent(sessionId, workdir, route)
+      const handle = await this.createAgent(sessionId, workdir, route, 'phase')
       this.keepHandle(cardId, handle)
       entry.cancel = () => handle.agent.cancel({ kind: 'user' })
       handle.agent.followup(this.asUserMessage(phasePrompt({ ...(await this.store.get(wsPath, cardId)) ?? { plan } as KanbanCard, plan } as KanbanCard, phaseIndex, workdir)))
@@ -984,9 +1037,9 @@ export class KanbanRunner implements KanbanToolResolver {
     const sessionId = this.newSessionId()
     this.sessionCards.set(sessionId, cardId)
     await this.store.mutate(cardId, (c) => { c.sessions.merge.push(sessionId) }, wsPath)
-    const route = await this.modelRoute(cardId, wsPath)
+    const route = await this.modelRoute(cardId, wsPath, 'merge')
     try {
-      const handle = await this.createAgent(sessionId, workdir, route)
+      const handle = await this.createAgent(sessionId, workdir, route, 'merge')
       this.keepHandle(cardId, handle)
       handle.agent.followup(this.asUserMessage(mergePrompt(workdir, conflicts)))
       await handle.agent.whenIdle()

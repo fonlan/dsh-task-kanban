@@ -111,7 +111,19 @@ export interface ModelOption {
   name?: string
 }
 
+/** Which kanban session kind a per-type default applies to. */
+export type KanbanSessionKind = 'refine' | 'phase' | 'merge'
+
 export interface KanbanSettingsShape {
   maxParallelWorkers: number
-  defaultModel: string
+  /** Requirement-refinement session defaults. */
+  refinementModel: string
+  refinementProvider: string
+  refinementReasoningEffort: string
+  refinementPreset: string
+  /** Phase implementation session defaults. */
+  phaseModel: string
+  phaseProvider: string
+  phaseReasoningEffort: string
+  phasePreset: string
 }

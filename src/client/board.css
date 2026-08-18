@@ -41,9 +41,9 @@
   flex: 0 1 auto;
   padding: 6px 10px;
   border-radius: 6px;
-  border: 1px solid rgba(128, 128, 128, 0.35);
-  background: rgba(128, 128, 128, 0.12);
-  color: inherit;
+  border: 1px solid var(--dsw-alias-border-l2-darkmode-thin, var(--dsw-alias-border-l2, rgba(128, 128, 128, 0.35)));
+  background: var(--dsw-specific-input-major, var(--dsw-alias-bg-layer-1, rgba(128, 128, 128, 0.12)));
+  color: var(--dsw-alias-label-primary, inherit);
   font-size: 14px;
 }
 .kb-btn {
@@ -272,17 +272,23 @@
   text-overflow: ellipsis;
 }
 .kb-field-row { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+/* Field labels in a row never wrap; selects get the remaining fixed width. */
+.kb-field-row > span { white-space: nowrap; flex-shrink: 0; margin-bottom: 0; }
 .kb-input {
   width: 100%;
   box-sizing: border-box;
   padding: 7px 10px;
   border-radius: 6px;
-  border: 1px solid rgba(128, 128, 128, 0.35);
-  background: rgba(128, 128, 128, 0.1);
-  color: inherit;
+  /* Form controls follow the shell theme: DSH's input surface token plus a
+     theme-tuned border; the fallbacks cover shells without these tokens. */
+  border: 1px solid var(--dsw-alias-border-l2-darkmode-thin, var(--dsw-alias-border-l2, rgba(128, 128, 128, 0.35)));
+  background: var(--dsw-specific-input-major, var(--dsw-alias-bg-layer-1, rgba(128, 128, 128, 0.1)));
+  color: var(--dsw-alias-label-primary, inherit);
   font-size: 13px;
 }
 .kb-input-number { width: 90px; }
+/* All settings selects share one width so the column looks even. */
+.kb-settings select.kb-input { width: 200px; flex: 0 0 200px; }
 .kb-textarea { min-height: 110px; resize: vertical; font-family: inherit; }
 .kb-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 .kb-detail-section { margin-bottom: 12px; }
@@ -350,6 +356,8 @@
 .kb-session-links { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .kb-settings { display: flex; flex-direction: column; gap: 12px; max-width: 420px; }
 .kb-settings-saved { font-size: 12px; color: #4ade80; }
+.kb-settings-group { border-top: 1px solid rgba(128, 128, 128, 0.22); padding-top: 12px; }
+.kb-settings-group-title { font-size: 12px; font-weight: 600; opacity: 0.9; margin-bottom: 10px; }
 .kb-footer-action {
   display: inline-flex;
   align-items: center;

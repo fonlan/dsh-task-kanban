@@ -6,10 +6,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
-import type { Lane } from '../shared/card.js'
+import type { KanbanSettingsShape, Lane } from '../shared/card.js'
 import type { KanbanRunner } from './runner.js'
 import type { KanbanSettingsFace } from './settings.js'
-import { listModels } from './models.js'
+import { listModels, reasoningOptions } from './models.js'
 
 const API_PREFIX = '/plugins/@fonlan/dsh-task-kanban/api'
 
@@ -152,15 +152,44 @@ export function registerApiRoutes(
 
   route('settings.get', async () => settings.get())
 
+  /** Every settings field the client may write (per-session-type defaults included). */
+  const SETTING_STRING_FIELDS = [
+    'refinementModel',
+    'refinementProvider',
+    'refinementReasoningEffort',
+    'refinementPreset',
+    'phaseModel',
+    'phaseProvider',
+    'phaseReasoningEffort',
+    'phasePreset',
+  ] as const
+
   route('settings.set', async (p) => {
-    const patch: { maxParallelWorkers?: number; defaultModel?: string } = {}
+    const patch: Partial<KanbanSettingsShape> = {}
     if (typeof p.maxParallelWorkers === 'number') patch.maxParallelWorkers = p.maxParallelWorkers
-    if (typeof p.defaultModel === 'string') patch.defaultModel = p.defaultModel
+    for (const key of SETTING_STRING_FIELDS) {
+      if (typeof p[key] === 'string') patch[key] = p[key]
+    }
     await settings.update(patch)
     return settings.get()
   })
 
   route('models.list', async () => listModels(ctx))
+
+  route('presets.list', async () => {
+    const presets = ctx.get('agentPresets') as
+      | { list(): Promise<Array<{ id: string; name?: string; description?: string }>> }
+      | undefined
+    if (presets === undefined) return []
+    const rows = await presets.list()
+    return rows.map((r) => ({ id: r.id, name: r.name, description: r.description }))
+  })
+
+  route('reasoning.options', async (p) => {
+    const provider = requireString(p.provider, 'provider')
+    const model = requireString(p.model, 'model')
+    return reasoningOptions(ctx, provider, model)
+  })
 
   return () => {
     for (const d of disposers) d()

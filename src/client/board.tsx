@@ -326,13 +326,6 @@ function NewTaskModal({ t, workspaces, selectedPath, sessionId, onClose, onCreat
     api.models()
       .then((list) => { if (alive) setModels(list) })
       .catch(() => { if (alive) setModels([]) })
-    api.settingsGet()
-      .then((s) => {
-        if (alive && s.defaultModel !== '') {
-          setModel(s.defaultModel)
-        }
-      })
-      .catch(() => undefined)
     return () => { alive = false }
   }, [])
 
