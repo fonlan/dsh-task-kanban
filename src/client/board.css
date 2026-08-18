@@ -360,20 +360,23 @@
 .kb-settings-group-title { font-size: 12px; font-weight: 600; opacity: 0.9; margin-bottom: 10px; }
 /* Settings card (设置 → 插件配置): mirrors the built-in plugin cards
    (dsh-client-ui-settings-plugins PluginCard) — same surface, border, head
-   layout, and disclosure chevron, spelled with kb- prefixed classes. */
-.kb-card {
+   layout, and disclosure chevron, spelled with kb-settings-card prefixed
+   classes. The prefix deliberately does NOT reuse the board's `.kb-card*`
+   classes: the board card carries its own padding/cursor/user-select, and
+   sharing the root class would leak those onto the settings card. */
+.kb-settings-card {
   border: 1px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-3);
   border-radius: 12px;
   list-style: none;
   transition: border-color .16s, background .16s;
 }
-.kb-card:hover { border-color: var(--dsw-alias-label-dimmed); }
-.kb-card[data-open] {
+.kb-settings-card:hover { border-color: var(--dsw-alias-label-dimmed); }
+.kb-settings-card[data-open] {
   background: var(--dsw-alias-bg-layer-2);
   border-color: var(--dsw-alias-label-dimmed);
 }
-.kb-card-head {
+.kb-settings-card-head {
   appearance: none;
   width: 100%;
   font: inherit;
@@ -388,11 +391,11 @@
   padding: 14px 16px;
   display: flex;
 }
-.kb-card-head:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -2px; }
-.kb-card-headText { flex-direction: column; flex: 1; gap: 4px; min-width: 0; display: flex; }
-.kb-card-title { color: var(--dsw-alias-label-primary); font-size: 15px; font-weight: 600; line-height: 1.4; }
-.kb-card-sub { color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 1.5; }
-.kb-card-chevron {
+.kb-settings-card-head:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -2px; }
+.kb-settings-card-headText { flex-direction: column; flex: 1; gap: 4px; min-width: 0; display: flex; }
+.kb-settings-card-title { color: var(--dsw-alias-label-primary); font-size: 15px; font-weight: 600; line-height: 1.4; }
+.kb-settings-card-sub { color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 1.5; }
+.kb-settings-card-chevron {
   color: var(--dsw-alias-label-tertiary);
   flex: none;
   transition: transform .16s;
@@ -400,8 +403,8 @@
   align-items: center;
   justify-content: center;
 }
-.kb-card-chevron[data-open] { transform: rotate(180deg); }
-.kb-card-body { border-top: 1px solid var(--dsw-alias-border-l2); margin: 0 16px; padding: 12px 0 8px; }
+.kb-settings-card-chevron[data-open] { transform: rotate(180deg); }
+.kb-settings-card-body { border-top: 1px solid var(--dsw-alias-border-l2); margin: 0 16px; padding: 12px 0 8px; }
 .kb-footer-action {
   display: inline-flex;
   align-items: center;

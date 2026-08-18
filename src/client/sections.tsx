@@ -339,19 +339,19 @@ export function KanbanSettingsCard({ t }: SettingsCardProps): JSX.Element {
   }, [efforts])
 
   return (
-    <li className="kb-card" data-open={open ? '' : undefined}>
+    <li className="kb-settings-card" data-open={open ? '' : undefined}>
       <button
         type="button"
-        className="kb-card-head"
+        className="kb-settings-card-head"
         aria-expanded={open}
         aria-label={(open ? tr('settingsCollapse') : tr('settingsExpand')) + '：' + tr('settingsTitle')}
         onClick={() => setOpen(!open)}
       >
-        <span className="kb-card-headText">
-          <span className="kb-card-title">{tr('settingsTitle')}</span>
-          <span className="kb-card-sub">{tr('settingsDescription')}</span>
+        <span className="kb-settings-card-headText">
+          <span className="kb-settings-card-title">{tr('settingsTitle')}</span>
+          <span className="kb-settings-card-sub">{tr('settingsDescription')}</span>
         </span>
-        <span className="kb-card-chevron" data-open={open ? '' : undefined} aria-hidden="true">
+        <span className="kb-settings-card-chevron" data-open={open ? '' : undefined} aria-hidden="true">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M3.5 5.25L7 8.75L10.5 5.25" stroke="currentColor" strokeWidth="1.5"
               strokeLinecap="round" strokeLinejoin="round" />
@@ -359,7 +359,7 @@ export function KanbanSettingsCard({ t }: SettingsCardProps): JSX.Element {
         </span>
       </button>
       {open && (
-        <div className="kb-card-body">
+        <div className="kb-settings-card-body">
           <div className="kb-settings">
             <label className="kb-field kb-field-row">
               <span>{tr('maxParallelWorkers')}</span>
