@@ -28,9 +28,10 @@ jobs:
           fi
 
       - name: Setup pnpm
+        # Version comes from the "packageManager" field in package.json
+        # (pnpm@11.21.0); specifying both here and there makes the action fail
+        # with ERR_PNPM_BAD_PM_VERSION.
         uses: pnpm/action-setup@v4
-        with:
-          version: 11
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
