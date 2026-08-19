@@ -37,7 +37,8 @@
     "src",
     "cordis.patch.yml",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "docs/screenshots"
   ],
   "publishConfig": {
     "access": "public"

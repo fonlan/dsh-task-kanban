@@ -1,6 +1,16 @@
-# @fonlan/dsh-task-kanban
+# dsh-task-kanban
 
 **@fonlan/dsh-task-kanban** 是一个 [DSH](https://github.com/deepseek-ai/dsh) web 插件，为 web 主界面新增"任务看板"：把需求细化成多 phase 实现计划，并在 git worktree 中串行实现、全部 phase 完成后自动合入主分支，全流程状态在"需求 / 队列 / 运行中 / 已完成 / 已合并"五条泳道上可视化。
+
+## 界面预览
+
+![任务看板与 plan 详情](docs/screenshots/kanban-plan-detail.png)
+
+任务看板把卡片按「需求 / 队列 / 运行中 / 已完成 / 已合并」五条泳道可视化，卡片显示标题、需求摘要、模型、细化 Skill、plan 状态徽标与所属阶段；点击任意卡片，页面下方会展开 plan 详情面板：需求、实现方案摘要，以及按 phase 卡片化展示的目标 / 会话 / 结论，并支持停止 / 重试 / 删除等操作。
+
+![设置界面](docs/screenshots/kanban-settings.png)
+
+侧边栏设置 → 插件配置 →「任务看板」卡片可配置全局并行 worker 数，以及细化需求会话与 Phase 实现会话各自的默认模型、推理强度与 Agent 预设。
 
 ## 功能
 
