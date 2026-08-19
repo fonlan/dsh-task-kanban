@@ -637,6 +637,7 @@ function PhaseCard({ phase, phaseIndex, card, t, onOpenSession }: {
   const cls = 'kb-plan-phase'
     + (isCurrent ? ' kb-plan-phase-current' : '')
     + (isCompleted ? ' kb-plan-phase-completed' : '')
+  const planTitle = card.plan?.title ?? ''
   return (
     <li className={cls}>
       <div className="kb-plan-phase-head">
@@ -651,7 +652,7 @@ function PhaseCard({ phase, phaseIndex, card, t, onOpenSession }: {
         {attempts.length > 0 && (
           <div className="kb-plan-phase-section">
             <div className="kb-plan-phase-section-title">{t('phaseSessions')}</div>
-            <PhaseSessions attempts={attempts} t={t} onOpenSession={onOpenSession} />
+            <PhaseSessions attempts={attempts} planTitle={planTitle} phaseIndex={phaseIndex} t={t} onOpenSession={onOpenSession} />
           </div>
         )}
         {summaries.length > 0 && (
@@ -669,17 +670,24 @@ function PhaseCard({ phase, phaseIndex, card, t, onOpenSession }: {
   )
 }
 
-/** Open-session buttons for one phase's attempts (retries append more). */
-function PhaseSessions({ attempts, t, onOpenSession }: {
+/**
+ * Open-session buttons for one phase's attempts (retries append more). The
+ * button labels the session with the deterministic "{plan title} · phase N"
+ * format (the requested fallback when the host never auto-generated a title);
+ * the full session id stays available as the native tooltip.
+ */
+function PhaseSessions({ attempts, planTitle, phaseIndex, t, onOpenSession }: {
   attempts: PhaseAttempt[]
-  t: (key: string) => string
+  planTitle: string
+  phaseIndex: number
+  t: (key: string, params?: Record<string, unknown>) => string
   onOpenSession: (sessionId: string) => void
 }): JSX.Element {
   return (
     <div className="kb-plan-phase-sessions">
       {attempts.map((a) => (
-        <button key={a.sessionId} type="button" className="kb-btn kb-btn-small" onClick={() => onOpenSession(a.sessionId)}>
-          {t('openSession')} · {a.sessionId.slice(0, 13)}
+        <button key={a.sessionId} type="button" className="kb-btn kb-btn-small" title={a.sessionId} onClick={() => onOpenSession(a.sessionId)}>
+          {t('openSession')} · {planTitle !== '' ? `${planTitle} · ${t('phaseNum', { n: phaseIndex + 1 })}` : a.sessionId.slice(0, 13)}
         </button>
       ))}
     </div>

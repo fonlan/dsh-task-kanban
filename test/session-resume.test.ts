@@ -76,6 +76,57 @@ function fakeAgent(id: SessionId, register: () => void) {
   return { id, ctx: { tools: { register } } }
 }
 
+/**
+ * A workspace ctx extended with fake `sessionTitle` + `sessions` services.
+ * `snapshot` is what `sessionTitle.get()` returns; every rename is recorded.
+ */
+function makeTitleCtx(
+  snapshot: { source: { kind: string } } | undefined,
+  sessionLive = true,
+): { ctx: Context; renamed: string[] } {
+  const base = makeWorkspaceCtx().ctx
+  const renamed: string[] = []
+  const fakeSession = { id: SID, events: [] } as unknown as Session
+  const ctx = {
+    ...base,
+    get: (name: string) => {
+      if (name === 'sessionTitle') {
+        return {
+          get: () => snapshot,
+          rename: (_s: Session, title: string) => {
+            renamed.push(title)
+            return { title, messageSeqs: [], source: { kind: 'user' }, eventSeq: 1, updatedAt: 0 }
+          },
+        }
+      }
+      if (name === 'sessions') {
+        return { get: (id: string) => (sessionLive && id === SID ? fakeSession : undefined) }
+      }
+      return (base.get as (n: string) => unknown)(name)
+    },
+  } as unknown as Context
+  return { ctx, renamed }
+}
+
+function makePlanCard(status: KanbanCard['status']): KanbanCard {
+  const c = card(status)
+  c.plan = {
+    schemaVersion: 1,
+    title: '看板优化',
+    summary: 's',
+    phases: [
+      { id: 'p1', title: '按钮移位', goal: 'g1' },
+      { id: 'p2', title: '卡片布局', goal: 'g2' },
+    ],
+  }
+  c.phaseCount = 2
+  return c
+}
+
+const settle = (runner: KanbanRunner, sessionId: SessionId, plan: KanbanCard['plan'], phaseIndex: number): Promise<void> =>
+  (runner as unknown as { settlePhaseTitle(id: SessionId, plan: KanbanCard['plan'], i: number): Promise<void> })
+    .settlePhaseTitle(sessionId, plan, phaseIndex)
+
 const call = (runner: KanbanRunner, agent: unknown): Promise<void> =>
   (runner as unknown as { onAgentSessionStart(a: unknown): Promise<void> }).onAgentSessionStart(agent)
 
@@ -135,5 +186,78 @@ describe('KanbanRunner.indexSessions', () => {
     expect(map.get(SID)).toBe('c1')
     expect(map.get('session-phase')).toBe('c1')
     expect(map.get('session-merge')).toBe('c1')
+  })
+})
+
+describe('KanbanRunner.settlePhaseTitle', () => {
+  it('renames a fallback-kind phase title to "{plan title} · phase N"', async () => {
+    const { ctx, renamed } = makeTitleCtx({ source: { kind: 'fallback' } })
+    const runner = makeRunner(ctx, makeStore(card('running')))
+    await settle(runner, SID, makePlanCard('running').plan, 1)
+    expect(renamed).toEqual(['看板优化 · phase 2'])
+  })
+
+  it('keeps a provider-kind (LLM-generated) title', async () => {
+    const { ctx, renamed } = makeTitleCtx({ source: { kind: 'provider' } })
+    const runner = makeRunner(ctx, makeStore(card('running')))
+    await settle(runner, SID, makePlanCard('running').plan, 0)
+    expect(renamed).toEqual([])
+  })
+
+  it('keeps a user-pinned title', async () => {
+    const { ctx, renamed } = makeTitleCtx({ source: { kind: 'user' } })
+    const runner = makeRunner(ctx, makeStore(card('running')))
+    await settle(runner, SID, makePlanCard('running').plan, 0)
+    expect(renamed).toEqual([])
+  })
+
+  it('no-ops when the session is not live or the services are missing', async () => {
+    const { ctx, renamed } = makeTitleCtx({ source: { kind: 'fallback' } }, false)
+    const runner = makeRunner(ctx, makeStore(card('running')))
+    await settle(runner, SID, makePlanCard('running').plan, 0)
+    expect(renamed).toEqual([])
+    // no sessionTitle/sessions services at all → must not throw
+    const bare = makeRunner(makeWorkspaceCtx().ctx, makeStore(card('running')))
+    await settle(bare, SID, makePlanCard('running').plan, 0)
+  })
+})
+
+describe('KanbanRunner.settleResumedPhaseTitle via onAgentSessionStart', () => {
+  it('renames a historical (non-live) phase session whose title is fallback', async () => {
+    const store = makeStore(makePlanCard('error'))
+    await store.mutate('c1', (c) => {
+      c.sessions.phases.push({ phaseIndex: 1, sessionId: SID, startedAt: 0 })
+    })
+    const { ctx, renamed } = makeTitleCtx({ source: { kind: 'fallback' } })
+    const runner = makeRunner(ctx, store)
+    ;(runner as unknown as { sessionCards: Map<string, string> }).sessionCards.set(SID, 'c1')
+    let registered = 0
+    await call(runner, fakeAgent(SID, () => { registered += 1 }))
+    expect(registered).toBe(3)
+    expect(renamed).toEqual(['看板优化 · phase 2'])
+  })
+
+  it('skips live phase sessions (LLM title may still be pending)', async () => {
+    const store = makeStore(makePlanCard('running'))
+    await store.mutate('c1', (c) => {
+      c.sessions.phases.push({ phaseIndex: 0, sessionId: SID, startedAt: 0 })
+    })
+    const { ctx, renamed } = makeTitleCtx({ source: { kind: 'fallback' } })
+    const runner = makeRunner(ctx, store)
+    ;(runner as unknown as { sessionCards: Map<string, string> }).sessionCards.set(SID, 'c1')
+    await call(runner, fakeAgent(SID, () => { /* tools */ }))
+    expect(renamed).toEqual([])
+  })
+
+  it('keeps provider-kind titles on resumed sessions', async () => {
+    const store = makeStore(makePlanCard('error'))
+    await store.mutate('c1', (c) => {
+      c.sessions.phases.push({ phaseIndex: 0, sessionId: SID, startedAt: 0 })
+    })
+    const { ctx, renamed } = makeTitleCtx({ source: { kind: 'provider' } })
+    const runner = makeRunner(ctx, store)
+    ;(runner as unknown as { sessionCards: Map<string, string> }).sessionCards.set(SID, 'c1')
+    await call(runner, fakeAgent(SID, () => { /* tools */ }))
+    expect(renamed).toEqual([])
   })
 })

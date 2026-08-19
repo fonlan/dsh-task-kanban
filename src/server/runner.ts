@@ -28,6 +28,12 @@ interface WorkspaceEntry {
   path: string
 }
 
+/** Minimal structural face of the optional host `sessionTitle` service. */
+interface SessionTitleFace {
+  get(session: Session): { source: { kind: string } } | undefined
+  rename(session: Session, title: string): unknown
+}
+
 interface RunningEntry {
   cardId: string
   workspacePath: string
@@ -228,6 +234,15 @@ export class KanbanRunner implements KanbanToolResolver {
       this.toolScopedAgents.add(agent)
     } catch (error) {
       console.error('[task-kanban] register kanban tools for ' + agent.id + ' failed:', String(error))
+    }
+    // Historical phase sessions reopened after their work ended (completion,
+    // interruption, host restart) keep a deterministic "plan · phase N" title
+    // when the host LLM title never landed. Fresh sessions are skipped here:
+    // their card is live ('running') and the LLM title may still be pending.
+    try {
+      await this.settleResumedPhaseTitle(agent.id, cardId)
+    } catch (error) {
+      console.error('[task-kanban] settle resumed phase title failed:', String(error))
     }
   }
 
@@ -791,6 +806,10 @@ export class KanbanRunner implements KanbanToolResolver {
       entry.cancel = () => handle.agent.cancel({ kind: 'user' })
       handle.agent.followup(this.asUserMessage(phasePrompt({ ...(await this.store.get(wsPath, cardId)) ?? { plan } as KanbanCard, plan } as KanbanCard, phaseIndex, workdir)))
       await handle.agent.whenIdle()
+      // Deterministic title fallback: keep the host LLM title when it landed
+      // (provider-kind); otherwise rename to "{plan title} · phase N" so the
+      // session never shows the raw prompt prefix in the sidebar.
+      await this.settlePhaseTitle(sessionId, plan, phaseIndex)
       if (entry.stopped) {
         await this.store.mutate(cardId, (c) => {
           c.status = 'queued'
@@ -813,6 +832,52 @@ export class KanbanRunner implements KanbanToolResolver {
       await this.fail(cardId, 'phase_failed', `运行 phase ${phase.id} 失败: ${String(error)}`, 'running')
       return false
     }
+  }
+
+  /**
+   * Deterministic title fallback for phase implementation sessions. The host
+   * session-title service (`dsh-session-title-first-prompt-llm`) generates an
+   * LLM title for every fresh non-fork session whose first user message is
+   * human-kind; when it lands, `session/title` carries a `provider` source and
+   * we keep it. Kanban sessions are routed through the `model-router` provider
+   * by default and their LLM title call never settles there (observed: only
+   * the deterministic prompt-prefix fallback "你是一个软件实现工程师。请…"
+   * ever lands). Once the phase session is over — or a persisted session is
+   * reopened — no LLM title is coming, so a still-`fallback` title is renamed
+   * to "{plan title} · phase N": the display format requested as the fallback
+   * when auto-generation is unavailable. Best-effort only: a missing title
+   * service, session, or a rename failure must never break the card flow.
+   */
+  private async settlePhaseTitle(sessionId: SessionId, plan: Plan, phaseIndex: number): Promise<void> {
+    const sessionTitle = this.ctx.get('sessionTitle') as SessionTitleFace | undefined
+    if (sessionTitle === undefined) return
+    const sessions = this.ctx.get('sessions') as { get(id: string): Session | undefined } | undefined
+    const session = sessions?.get(sessionId)
+    if (session === undefined) return
+    const snapshot = sessionTitle.get(session)
+    if (snapshot === undefined || snapshot.source.kind !== 'fallback') return
+    const phase = plan.phases[phaseIndex]
+    const base = plan.title.trim() !== '' ? plan.title : phase?.title ?? ''
+    const title = `${base} · phase ${phaseIndex + 1}`
+    try {
+      sessionTitle.rename(session, title)
+    } catch (error) {
+      console.error('[task-kanban] settle phase session title failed:', String(error))
+    }
+  }
+
+  /**
+   * Title fallback for phase sessions that are reopened after their work
+   * ended (completion, interruption, or a host restart). A live phase card is
+   * skipped: its session may still be generating the LLM title.
+   */
+  private async settleResumedPhaseTitle(sessionId: string, cardId: string): Promise<void> {
+    const card = await this.findCard(cardId)
+    if (card === undefined || card.plan === undefined) return
+    if (card.status === 'running' || card.status === 'refining' || card.status === 'merging') return
+    const attempt = card.sessions.phases.find((a) => a.sessionId === sessionId)
+    if (attempt === undefined) return
+    await this.settlePhaseTitle(sessionId as SessionId, card.plan, attempt.phaseIndex)
   }
 
   private async resolveConflictsIn(
