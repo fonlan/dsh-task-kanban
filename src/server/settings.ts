@@ -7,10 +7,10 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { KanbanSessionKind, KanbanSettingsShape } from '../shared/card.js'
+import type {} from '@deepseek-ai/dsh-settings'
 
-export const KANBAN_SETTINGS_NS = settingsNamespace('task-kanban')
+export const KANBAN_SETTINGS_NS = 'task-kanban'
 
 export const KanbanSettingsSchema = z.object({
   maxParallelWorkers: z.natural().min(1).default(1),

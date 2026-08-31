@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context } from '@deepseek-ai/cordis'
+type ClientContext = Context
 
 /**
  * HMR-safe shared state store keyed on the global symbol registry.
