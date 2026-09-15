@@ -15,6 +15,8 @@ interface BoardProps {
 /** Session-list snapshot shape the standard `useSessions` feed carries. */
 interface SessionListStateLike {
   current?: string
+  /** Listed session ids (the feed's own order). */
+  ids?: string[]
 }
 
 function firstLine(text: string): string {
@@ -82,7 +84,11 @@ export function BoardRoot(props: BoardProps): JSX.Element {
   const items: WorkspaceRow[] = wsState?.items ?? []
   const useSessions = props.useSessions
   const sessionState = useSessions !== undefined ? (useSessions((s: unknown) => s) as SessionListStateLike | undefined) : undefined
-  const currentSessionId = sessionState?.current
+  // The skill catalog is addressed by session (`skills/list`), so the /-menu
+  // needs one. With no selection (fresh browser, board opened straight from the
+  // footer) fall back to the most recent listed session: any session resolves a
+  // preset scope, whereas no session silently leaves the menu empty.
+  const currentSessionId = sessionState?.current ?? sessionState?.ids?.[0]
 
   const [selectedPath, setSelectedPath] = useState<string>(() => {
     try {

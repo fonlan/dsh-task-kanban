@@ -28,7 +28,7 @@ async function call<T>(method: string, payload: Record<string, unknown> = {}): P
   return parsed.value as T
 }
 
-/** One row of the host `skill.list` catalog (same shape DSH's chat autocomplete uses). */
+/** One row of the host `skills/list` catalog (same shape DSH's chat autocomplete uses). */
 export interface SkillOption {
   name: string
   description: string
@@ -37,22 +37,30 @@ export interface SkillOption {
 }
 
 /**
- * Call the host gateway's `skill.list` unary RPC over the same-origin HTTP
+ * Call the host gateway's `skills/list` unary RPC over the same-origin HTTP
  * bridge (the exact wire shape DSH's chat input uses for its /-autocomplete).
+ *
+ * DSH ≥0.1.5 addresses Remote endpoints as the canonical `<namespace>/<method>`
+ * pair — `/api/skills/list` with the method `skills/list` — and carries named
+ * wire arguments inside a single `args` field, so the request body is
+ * `{ args: { request: { sessionId } } }` (the descriptor's parameter wire name
+ * is `request`). The older dotted `skill.list` endpoint no longer exists and
+ * answers HTTP 404.
+ *
  * The requested `sessionId` scopes the catalog to that session's agent
  * preset, which is where the filesystem skill roots are registered.
  */
 export async function gatewaySkillList(sessionId: string): Promise<SkillOption[]> {
   let response: Response
   try {
-    response = await fetch('/api/skill.list', {
+    response = await fetch('/api/skills/list', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         type: 'client-request',
         rpcId: `task-kanban-${Math.random().toString(36).slice(2)}`,
-        method: 'skill.list',
-        payload: { sessionId },
+        method: 'skills/list',
+        payload: { args: { request: { sessionId } } },
       }),
     })
   } catch (error) {
