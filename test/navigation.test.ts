@@ -28,16 +28,36 @@ function makeSessions(): FakeSessions {
 }
 
 /** Minimal ClientContext stand-in: sessions service + slot registry. */
-function makeCtx(sessions: FakeSessions): { sessions: FakeSessions; slots: { register: () => () => void } } {
-  return {
-    sessions,
-    slots: {
-      register: () => () => undefined,
-    },
-  }
+interface FakeSlots {
+  injected: string[]
+  registrations: Array<{ name: string; priority?: number; locale?: string }>
+  disposals: number
+  inject: (name: string, callback: () => () => void) => () => void
+  register: (options: { name: string; priority?: number; locale?: string }) => () => void
 }
 
-function openBoard(ctx: { sessions: FakeSessions; slots: { register: () => () => void } }): void {
+function makeCtx(sessions: FakeSessions): { sessions: FakeSessions; slots: FakeSlots } {
+  const injected: string[] = []
+  const registrations: Array<{ name: string; priority?: number; locale?: string }> = []
+  const slots: FakeSlots = {
+    injected,
+    registrations,
+    disposals: 0,
+    // The slot owner is already mounted in this test environment, so inject
+    // immediately invokes its factory and returns the resulting disposer.
+    inject: (name, callback) => {
+      injected.push(name)
+      return callback()
+    },
+    register: (options) => {
+      registrations.push(options)
+      return () => { slots.disposals += 1 }
+    },
+  }
+  return { sessions, slots }
+}
+
+function openBoard(ctx: { sessions: FakeSessions; slots: FakeSlots }): void {
   setClient(ctx as never)
   setBoardRoot((() => null) as never)
   enterBoard()
@@ -51,6 +71,23 @@ afterEach(() => {
 })
 
 describe('bindSessionNavigation', () => {
+  it('mounts the board through the current main.conversation slot', () => {
+    const sessions = makeSessions()
+    const ctx = makeCtx(sessions)
+
+    openBoard(ctx)
+
+    expect(ctx.slots.injected).toEqual(['main.conversation'])
+    expect(ctx.slots.registrations).toEqual([{
+      name: 'main.conversation',
+      priority: -1,
+      locale: 'task-kanban',
+    }])
+
+    exitBoard()
+    expect(ctx.slots.disposals).toBe(1)
+  })
+
   it('exits the board before opening a session from the sidebar', () => {
     const sessions = makeSessions()
     const ctx = makeCtx(sessions)

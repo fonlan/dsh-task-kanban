@@ -508,17 +508,8 @@ export class KanbanRunner implements KanbanToolResolver {
       if (!interactive) {
         reply.dispose()
         settlement.dispose()
-        // debug: log the session tail regardless
-        try {
-          const events = handle.agent.session.events
-          const tail = events.slice(-10).map((e) => ({
-            type: e.type,
-            ...(e.data !== undefined ? { data: JSON.stringify(e.data).slice(0, 600) } : {}),
-          }))
-          console.error('[task-kanban] refinement session tail:', JSON.stringify(tail, null, 1))
-        } catch (error) {
-          console.error('[task-kanban] could not read session events:', String(error))
-        }
+        // Session event history is no longer exposed by DSH 0.1.5. The card
+        // state remains the authoritative diagnostic surface for this failure.
         await this.fail(cardId, 'refine_failed', '细化会话结束但未通过 kanban_write_plan 写回计划', 'demand')
         return
       }
@@ -1111,16 +1102,8 @@ export class KanbanRunner implements KanbanToolResolver {
       const done = this.completed.get(sessionId) === true
       this.completed.delete(sessionId)
       if (!done) {
-        try {
-          const events = handle.agent.session.events
-          const tail = events.slice(-6).map((e) => ({
-            type: e.type,
-            ...(e.data !== undefined ? { data: JSON.stringify(e.data).slice(0, 500) } : {}),
-          }))
-          console.error('[task-kanban] merge session tail:', JSON.stringify(tail, null, 1))
-        } catch (error) {
-          console.error('[task-kanban] merge session events unreadable:', String(error))
-        }
+        // DSH 0.1.5 no longer exposes session event history; persist the
+        // actionable failure on the card instead of relying on a debug tail.
         await this.fail(cardId, 'merge_failed', '合并会话结束但未调用 kanban_merge_resolved 声明解决', 'completed')
       }
       return done

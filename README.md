@@ -23,7 +23,7 @@
 
 ## 设置
 
-侧边栏设置中的「任务看板」分节（`settings.section` 插槽）支持：
+侧边栏设置 → 插件配置中的「任务看板」可展开卡片（`settings.plugin.item` 插槽）支持：
 
 - **全局并行 worker 数**：跨工作区同时执行的卡片数上限。
 - **细化需求会话默认 / Phase 实现会话默认**：分别配置两类会话的默认值：
@@ -39,13 +39,13 @@
 
 ### 方式一：从 npm 发布包安装
 
-当前发布版本：`0.1.0`。
+当前发布版本：`0.2.4`（适配 DSH `0.1.5-rc.2`）。
 
 ```sh
 dsh plugin --profile web add @fonlan/dsh-task-kanban
 ```
 
-> 如需固定版本，可显式指定版本号：`dsh plugin --profile web add @fonlan/dsh-task-kanban@0.1.0`。
+> 如需固定版本，可显式指定版本号：`dsh plugin --profile web add @fonlan/dsh-task-kanban@0.2.4`。
 
 ### 方式二：本地源码链接安装
 
@@ -56,7 +56,7 @@ pnpm build
 dsh plugin --profile web add .
 ```
 
-安装后插件即通过 `cordis.patch.yml` 自动挂载到 web profile。web profile 会读取该 patch 并把插件注册进 `sidebar.footer.action`（看板入口）、`conversation`（看板视图）与 `settings.section`（插件设置）等插槽，通常重启 web profile 后即可在侧边栏底部看到"任务看板"入口。
+安装后插件即通过 `cordis.patch.yml` 自动挂载到 web profile。web profile 会读取该 patch 并把插件注册进 `sidebar.footer.action`（看板入口）、`main.conversation`（看板视图）与 `settings.plugin.item`（插件设置）等插槽，通常重启 web profile 后即可在侧边栏底部看到"任务看板"入口。
 
 ## 开发
 

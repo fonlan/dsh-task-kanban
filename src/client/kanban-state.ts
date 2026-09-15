@@ -79,7 +79,12 @@ export function enterBoard(): void {
   const root = state.boardRoot
   if (ctx === null || root === null || state.boardDisposer !== null) return
   try {
-    state.boardDisposer = ctx.slots.register({ name: 'conversation', priority: -1, locale: 'task-kanban' } as never, root as never)
+    // DSH 0.1.5 moved the replaceable shell from the legacy `conversation`
+    // seat to `main.conversation`. Register through `inject` so the board
+    // waits for that owner if the client plugin load order is reversed.
+    state.boardDisposer = ctx.slots.inject('main.conversation', () =>
+      ctx.slots.register({ name: 'main.conversation', priority: -1, locale: 'task-kanban' } as never, root as never),
+    )
     state.boardOpen = true
     notify()
   } catch (error) {

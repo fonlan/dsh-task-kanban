@@ -4,6 +4,9 @@
  * of truth; en must carry the exact same key set (checked at runtime by the
  * locale registry).
  */
+import type {} from '@deepseek-ai/dsh-api-session-controller/client'
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { zh } from './locales'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
