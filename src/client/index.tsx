@@ -4,11 +4,14 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
-import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import { BoardRoot } from './board'
-import { KanbanFooterButton, KanbanSettingsCard } from './sections'
+import { KanbanFooterButton, KanbanSettingsSection } from './sections'
 import { LOCALE_NS, zh, en } from './locales'
 import { setClient, setBoardRoot, bindSessionNavigation } from './kanban-state'
+
+/** The settings sidebar entry this plugin's page owns (must stay stable). */
+const SETTINGS_SECTION_ID = 'task-kanban'
 
 /** Services required before mounting (provided by the client runtime). */
 export const inject = ['slots', 'sessions', 'workspaces', 'locale']
@@ -37,15 +40,17 @@ export function apply(ctx: ClientContext): void {
     }, KanbanFooterButton as never),
   )
 
-  // The plugin's own Settings Card (设置 → 插件配置) rides the `task-kanban`
-  // settings namespace: registering into the keyed `settings.plugin.item` slot
-  // with the namespace string makes the configurable-plugins tab dispatch the
-  // card next to the built-in ones (bash / agent loop / web search).
-  ctx.slots.inject('settings.plugin.item', () =>
+  // The plugin's own settings page (设置 -> 侧栏「任务看板」) rides the
+  // task-kanban settings namespace and registers into the settings.section
+  // list slot, which gives it one entry in the settings sidebar and renders
+  // its content into the panel's content column.
+  ctx.slots.inject('settings.section', () =>
     ctx.slots.register({
-      name: 'settings.plugin.item',
-      key: 'task-kanban',
+      name: 'settings.section',
+      id: SETTINGS_SECTION_ID,
+      order: 200,
+      label: () => t('settingsTitle'),
       locale: LOCALE_NS,
-    }, KanbanSettingsCard as never),
+    }, KanbanSettingsSection as never),
   )
 }
