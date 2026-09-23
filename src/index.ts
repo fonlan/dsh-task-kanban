@@ -7,20 +7,22 @@
  * serves the fenced JSON API the board UI calls.
  */
 import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
-import { registerSettings } from './server/settings.js'
+import { KanbanSettingsSchema, registerSettings } from './server/settings.js'
 import { TaskStore } from './server/task-store.js'
 import { KanbanRunner } from './server/runner.js'
 import { registerApiRoutes } from './server/rpc.js'
+import type { KanbanSettingsShape } from './shared/card.js'
 
 export const name = '@fonlan/dsh-task-kanban'
 
 export const inject = ['webServer', 'agents', 'skills']
 
-export const Config = z.object({})
+// The entry config is the settings document (worker count + per-session-type
+// defaults); a changed config restarts this entry.
+export const Config = KanbanSettingsSchema
 
-export function apply(ctx: Context, _config: unknown): void {
-  const settings = registerSettings(ctx)
+export function apply(ctx: Context, config: KanbanSettingsShape): void {
+  const settings = registerSettings(ctx, config)
   const store = new TaskStore()
   const runner = new KanbanRunner(ctx, store, settings)
 

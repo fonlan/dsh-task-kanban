@@ -1,27 +1,28 @@
 /**
  * User-facing plugin settings (global parallel worker count, per-session-type
- * model/effort/preset defaults), persisted through the settings service
- * namespace `task-kanban`. The DSH settings service requires a lowercase
- * kebab-case namespace (/^[a-z][a-z0-9-]*$/), so the scoped package name
- * cannot be used here.
+ * model/effort/preset defaults), carried by this bundle's entry config: dsh
+ * >= 0.1.7 owns plugin settings as entry config (the plugin's `Config`
+ * schema), so the face reads the config it was applied with and persists
+ * updates through `settings.update`.
  */
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { KanbanSessionKind, KanbanSettingsShape } from '../shared/card.js'
-import type {} from '@deepseek-ai/dsh-settings'
 
 export const KANBAN_SETTINGS_NS = 'task-kanban'
 
-export const KanbanSettingsSchema = z.object({
-  maxParallelWorkers: z.natural().min(1).default(1),
-  refinementModel: z.string().default(''),
-  refinementProvider: z.string().default(''),
-  refinementReasoningEffort: z.string().default(''),
-  refinementPreset: z.string().default(''),
-  phaseModel: z.string().default(''),
-  phaseProvider: z.string().default(''),
-  phaseReasoningEffort: z.string().default(''),
-  phasePreset: z.string().default(''),
+export const KanbanSettingsSchema: z<KanbanSettingsShape> = z.object({
+  // Volatile: the settings plane (settings page / settings.update) only
+  // writes volatile-marked fields on dsh >= 0.1.7.
+  maxParallelWorkers: z.natural().min(1).default(1).volatile(),
+  refinementModel: z.string().default('').volatile(),
+  refinementProvider: z.string().default('').volatile(),
+  refinementReasoningEffort: z.string().default('').volatile(),
+  refinementPreset: z.string().default('').volatile(),
+  phaseModel: z.string().default('').volatile(),
+  phaseProvider: z.string().default('').volatile(),
+  phaseReasoningEffort: z.string().default('').volatile(),
+  phasePreset: z.string().default('').volatile(),
 })
 
 /** The per-session-type default slice a session kind resolves. */
@@ -47,38 +48,59 @@ export interface KanbanSettingsFace {
 
 /** Structural settings-service subset; the real service resolves the schema. */
 interface SettingsServiceLike {
-  register(ns: unknown, schema: unknown): unknown
   update(ns: unknown, patch: Record<string, unknown>, expectedRevision?: number): Promise<unknown>
+}
+
+/** One config field as the loader hands it over: a stable volatile reference. */
+interface VolatileField<T> {
+  get(): T | undefined
+}
+
+/**
+ * Dereference one config field. `Config` fields marked `.volatile()` are handed
+ * to the plugin as references (`{ get() }`) instead of plain values, so reading
+ * them raw yields the reference object — which serializes to `{}` and makes
+ * every setting look empty. Non-volatile (plain) configs keep working as-is.
+ */
+function fieldValue<T>(value: unknown, fallback: T): T {
+  if (value !== null && typeof value === 'object' && typeof (value as VolatileField<T>).get === 'function') {
+    return (value as VolatileField<T>).get() ?? fallback
+  }
+  return (value as T | undefined) ?? fallback
 }
 
 const EMPTY_DEFAULTS: KanbanSessionDefaults = { model: '', provider: '', reasoningEffort: '', preset: '' }
 
-export function registerSettings(ctx: Context): KanbanSettingsFace {
-  let current: KanbanSettingsShape = {
-    maxParallelWorkers: 1,
-    refinementModel: '',
-    refinementProvider: '',
-    refinementReasoningEffort: '',
-    refinementPreset: '',
-    phaseModel: '',
-    phaseProvider: '',
-    phaseReasoningEffort: '',
-    phasePreset: '',
-  }
+export function registerSettings(ctx: Context, config: KanbanSettingsShape): KanbanSettingsFace {
+  const fields = (config ?? {}) as unknown as Record<string, unknown>
+  // Read the references on EVERY access: the settings plane updates them in
+  // place (a volatile-only config change does not restart this entry).
+  const snapshot = (): KanbanSettingsShape => ({
+    maxParallelWorkers: fieldValue(fields.maxParallelWorkers, 1),
+    refinementModel: fieldValue(fields.refinementModel, ''),
+    refinementProvider: fieldValue(fields.refinementProvider, ''),
+    refinementReasoningEffort: fieldValue(fields.refinementReasoningEffort, ''),
+    refinementPreset: fieldValue(fields.refinementPreset, ''),
+    phaseModel: fieldValue(fields.phaseModel, ''),
+    phaseProvider: fieldValue(fields.phaseProvider, ''),
+    phaseReasoningEffort: fieldValue(fields.phaseReasoningEffort, ''),
+    phasePreset: fieldValue(fields.phasePreset, ''),
+  })
+  // Optimistic overlay: `settings.update` persists through the profile document
+  // and refreshes the references asynchronously, so the write's own caller must
+  // still observe the patch it just sent.
+  let pending: Partial<KanbanSettingsShape> = {}
+  const current = (): KanbanSettingsShape => ({ ...snapshot(), ...pending })
   let service: SettingsServiceLike | undefined
+  // Optional settings service: without one the settings still resolve from
+  // the entry config; edits just cannot persist.
   ctx.inject(['settings'], (sctx) => {
-    service = sctx.settings as unknown as SettingsServiceLike
-    const scope = service.register(KANBAN_SETTINGS_NS, KanbanSettingsSchema) as {
-      get(): KanbanSettingsShape
-      watch(callback: (next: KanbanSettingsShape) => void): () => void
-    }
-    current = scope.get()
-    scope.watch((next) => { current = next })
+    service = (sctx as unknown as { settings?: SettingsServiceLike }).settings
   })
   return {
-    get: () => current,
+    get: () => current(),
     sessionDefaults: (kind) => {
-      const s = current
+      const s = current()
       switch (kind) {
         case 'refine':
           return { model: s.refinementModel, provider: s.refinementProvider, reasoningEffort: s.refinementReasoningEffort, preset: s.refinementPreset }
@@ -108,7 +130,10 @@ export function registerSettings(ctx: Context): KanbanSettingsFace {
       if (service === undefined) {
         throw new Error('@fonlan/dsh-task-kanban: settings service is not available in this profile')
       }
+      // The settings plane keys plugin settings by PROFILE ENTRY id (the id in
+      // cordis.patch.yml), which is what this plugin ships.
       await service.update(KANBAN_SETTINGS_NS, patch as Record<string, unknown>)
+      pending = { ...pending, ...patch }
     },
   }
 }
