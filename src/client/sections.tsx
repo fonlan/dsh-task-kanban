@@ -1,143 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { IconChecklistOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { ChecklistIcon } from './icons'
 import { api, type PresetOption, type ReasoningOptions } from './api'
-import { toggleBoard, useBoardOpen } from './kanban-state'
 import type { KanbanSettingsShape, ModelOption } from '../shared/card'
 
-interface FooterActionProps {
-  wide?: boolean
-  t?: (key: string) => string
-}
-
-/** Sidebar footer entry: toggles the kanban board main view.
- *  The shell renders footer actions on their own row ABOVE the settings row,
- *  so the button is reparented into the settings area to sit on the same
- *  line, right of the Settings trigger (see board.css .kb-settings-row). */
-export function KanbanFooterButton({ wide, t }: FooterActionProps): JSX.Element {
-  const open = useBoardOpen()
-  const ref = useRef<HTMLButtonElement | null>(null)
-  const label = t !== undefined ? t(open ? 'closeBoard' : 'openBoard') : 'Task Kanban'
-
-  useEffect(() => {
-    const btn = ref.current
-    if (btn === null) return
-    let foot: Element | null = null
-    let disposed = false
-
-    // Locate the sidebar foot area WITHOUT moving any DOM: it is the ancestor
-    // of the button whose LAST child contains the settings trigger and which
-    // is itself the last child of its parent (root > footArea > settingsArea).
-    // The slot machinery wraps entries in an anonymous div, so the search
-    // tolerates extra wrapper levels. Styling is pure CSS (see board.css
-    // .kb-foot-row), so a failed lookup only leaves the button in its natural
-    // slot row — it can never vanish.
-    const findFoot = (): Element | null => {
-      let el: Element | null = btn.parentElement
-      while (el !== null && el !== document.body && el.parentElement !== null) {
-        const last = el.lastElementChild
-        const hasTrigger =
-          last !== null &&
-          (last.querySelector?.('button[aria-haspopup="dialog"]') !== null ||
-            last.querySelector?.('button[aria-haspopup="menu"]') !== null)
-        const isLastChild = el.parentElement.lastElementChild === el
-        if (hasTrigger && isLastChild) return el
-        el = el.parentElement
-      }
-      return null
-    }
-
-    const tryApply = (): boolean => {
-      if (foot === null) {
-        try {
-          foot = findFoot()
-        } catch {
-          foot = null
-        }
-      }
-      if (foot === null) return false
-      try {
-        foot.classList.add('kb-foot-row')
-        foot.classList.toggle('kb-foot-rail', wide !== true)
-      } catch {
-        // element already gone; retry will re-locate
-      }
-      return true
-    }
-
-    let applied = false
-    try {
-      applied = tryApply()
-    } catch (error) {
-      console.error('[@fonlan/dsh-task-kanban] foot placement error:', error)
-    }
-    if (!applied) {
-      // The settings entry may mount later than this entry (plugin load
-      // order); retry on DOM mutations AND on a short interval until the
-      // foot area is found (give up after 15s).
-      const observer = new MutationObserver(() => {
-        if (disposed) return
-        if (tryApply()) observer.disconnect()
-      })
-      observer.observe(document.body, { childList: true, subtree: true })
-      const timer = window.setInterval(() => {
-        if (disposed) {
-          window.clearInterval(timer)
-          return
-        }
-        if (tryApply()) {
-          observer.disconnect()
-          window.clearInterval(timer)
-        }
-      }, 1000)
-      window.setTimeout(() => {
-        observer.disconnect()
-        window.clearInterval(timer)
-        if (foot === null) {
-          // report the DOM chain so the next report carries evidence
-          const chain: string[] = []
-          let el: Element | null = btn.parentElement
-          while (el !== null && chain.length < 8) {
-            chain.push(el.tagName + '.' + String(el.className).slice(0, 60))
-            el = el.parentElement
-          }
-          console.warn('[@fonlan/dsh-task-kanban] could not locate the sidebar foot area:', chain)
-        }
-      }, 15000)
-      return () => {
-        disposed = true
-        observer.disconnect()
-        window.clearInterval(timer)
-        try {
-          foot?.classList.remove('kb-foot-row')
-          foot?.classList.remove('kb-foot-rail')
-        } catch {
-          // already gone
-        }
-      }
-    }
-    return () => {
-      try {
-        foot?.classList.remove('kb-foot-row')
-        foot?.classList.remove('kb-foot-rail')
-      } catch {
-        // already gone
-      }
-    }
-  }, [wide])
-
-  return (
-    <button
-      ref={ref}
-      type="button"
-      className={'kb-footer-action' + (wide === true ? ' kb-footer-action-wide' : '') + (open ? ' kb-footer-action-active' : '')}
-      aria-label={label}
-      title={label}
-      onClick={() => toggleBoard()}
-    >
-      <IconChecklistOutline14 size={wide === true ? 16 : 18} />
-      {wide === true && <span className="kb-footer-label">{t !== undefined ? t('kanban') : 'Kanban'}</span>}
-    </button>
-  )
+/**
+ * Sidebar panel-row glyph for the board (`sidebar.panellist`).
+ *
+ * The shell owns the row: it renders the button, its label, tooltip and active
+ * state, and calls `layout.selectPanel(id)` on click. The entry contributes
+ * only the glyph, so this component must stay purely presentational.
+ */
+export function KanbanPanelIcon({ size }: { size: number }): JSX.Element {
+  return <ChecklistIcon size={size} />
 }
 
 interface SettingsSectionProps {

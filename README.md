@@ -10,7 +10,7 @@
 
 ![设置界面](docs/screenshots/kanban-settings.png)
 
-侧边栏设置 → 插件配置 →「任务看板」卡片可配置全局并行 worker 数，以及细化需求会话与 Phase 实现会话各自的默认模型、推理强度与 Agent 预设。
+打开看板：侧边栏「新建会话」下方的「任务看板」面板入口（与「插件」并列）。设置页：设置 → 侧边栏「任务看板」页，可配置全局并行 worker 数，以及细化需求会话与 Phase 实现会话各自的默认模型、推理强度与 Agent 预设。
 
 ## 功能
 
@@ -23,7 +23,7 @@
 
 ## 设置
 
-侧边栏设置 → 插件配置中的「任务看板」可展开卡片（`settings.plugin.item` 插槽）支持：
+设置 → 侧边栏「任务看板」页（`settings.section` 插槽）支持：
 
 - **全局并行 worker 数**：跨工作区同时执行的卡片数上限。
 - **细化需求会话默认 / Phase 实现会话默认**：分别配置两类会话的默认值：
@@ -39,13 +39,13 @@
 
 ### 方式一：从 npm 发布包安装
 
-当前发布版本：`0.2.4`（适配 DSH `0.1.5-rc.2`）。
+当前发布版本：`0.2.6`（适配 DSH `0.1.7-alpha.1`）。
 
 ```sh
 dsh plugin --profile web add @fonlan/dsh-task-kanban
 ```
 
-> 如需固定版本，可显式指定版本号：`dsh plugin --profile web add @fonlan/dsh-task-kanban@0.2.4`。
+> 如需固定版本，可显式指定版本号：`dsh plugin --profile web add @fonlan/dsh-task-kanban@0.2.6`。
 
 ### 方式二：本地源码链接安装
 
@@ -56,7 +56,9 @@ pnpm build
 dsh plugin --profile web add .
 ```
 
-安装后插件即通过 `cordis.patch.yml` 自动挂载到 web profile。web profile 会读取该 patch 并把插件注册进 `sidebar.footer.action`（看板入口）、`main.conversation`（看板视图）与 `settings.plugin.item`（插件设置）等插槽，通常重启 web profile 后即可在侧边栏底部看到"任务看板"入口。
+安装后插件即通过 `cordis.patch.yml` 自动挂载到 web profile。web profile 会读取该 patch，并把看板注册为**全局主面板**：侧边栏「新建会话」下方的面板行出现「任务看板」入口（`sidebar.panellist`，与「插件」并列），点击即把看板切到中央区域（`main` keyed 槽位，key = `task-kanban`）；设置页入口走 `settings.section`。点侧栏会话会先把中央区域交还给会话视图。
+
+> 入口位置在 DSH `0.1.7` 起改为面板行（旧版是 `sidebar.footer.action` 的侧栏底部按钮）：底部那一行归 Settings 独占，插件按钮挤在同一行会把设置触发按钮压窄。
 
 ## 开发
 
