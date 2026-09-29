@@ -18,6 +18,16 @@ interface LayoutLike {
 }
 
 /**
+ * Structural view of the client shell's workspace-navigation face
+ * (`ctx.uiWorkspace`, dsh-client-ui-workspace). Declared locally (no value
+ * import) so the plugin keeps working on a runtime whose workspace types differ.
+ */
+interface UiWorkspaceLike {
+  /** Select a Session (id, or a direct-parent subagent address) and show it. */
+  openSession(target: string): void
+}
+
+/**
  * HMR-safe owner context, keyed on the global symbol registry.
  *
  * The client-hmr hot swap re-evaluates this module (a fresh `lib/client.js`
@@ -78,41 +88,37 @@ export function leaveKanbanPanel(ctx: ClientContext | null = getClient()): void 
 }
 
 /**
- * Route session navigation through the panel selection: opening any session
- * while the board is the active panel first returns the center column to the
- * Conversation, so the session view renders.
+ * Open one session — or a durable direct-parent subagent address — in the
+ * center column, leaving the kanban panel.
  *
- * Every sidebar path that selects a session funnels through `sessions.open`
- * (session rows, search results, fork results, New Session) or
- * `sessions.openSubagent` (catalog children) — including re-clicking the
- * already-current session, which never changes `list.current` and therefore
- * cannot be caught by a list-store subscription. Wrapping the two entry points
- * covers all of them in one place.
+ * Navigation is a view-owner concern, not a session-controller one: `ctx.sessions`
+ * (`ISessions`) exposes retention (`retain`/`using`/`retainInfo`), creation,
+ * fork, search and catalog reads, and has no `open`/`openSubagent` at all
+ * ("navigation belongs to view owners"). The view owner the shell itself uses is
+ * `ctx.uiWorkspace.openSession(target)` (dsh-client-ui-workspace): it retains the
+ * session AND reveals the Conversation panel as ONE navigation action. Routing
+ * every open through it therefore replaces the old wrapper around
+ * `sessions.open`/`openSubagent`, which existed only to hand the center column
+ * back when a sidebar click selected a session while the board was showing.
  *
- * The wrapper is idempotent: a `kbBound` marker on the wrapper prevents a
- * second bind (plugin re-apply / HMR) from stacking another layer.
+ * @param target - session id (or subagent address) to show.
+ * @returns whether the runtime provided the navigation face; `false` means the
+ *   session could not be shown (a client without ui-workspace).
  */
-export function bindSessionNavigation(ctx: ClientContext): void {
-  const sessions = ctx.sessions
-  if (sessions === undefined) return
-
-  const open = sessions.open
-  if (typeof open === 'function' && (open as unknown as { kbBound?: boolean }).kbBound !== true) {
-    const bound = ((id: Parameters<typeof open>[0]) => {
-      leaveKanbanPanel(ctx)
-      return open.call(sessions, id)
-    }) as typeof open
-    ;(bound as unknown as { kbBound?: boolean }).kbBound = true
-    sessions.open = bound
+export function openSessionView(target: string, ctx: ClientContext | null = getClient()): boolean {
+  if (ctx === null) return false
+  let uiWorkspace: UiWorkspaceLike | undefined
+  try {
+    uiWorkspace = (ctx as unknown as { uiWorkspace?: UiWorkspaceLike }).uiWorkspace
+  } catch {
+    return false
   }
-
-  const openSubagent = sessions.openSubagent
-  if (typeof openSubagent === 'function' && (openSubagent as unknown as { kbBound?: boolean }).kbBound !== true) {
-    const bound = ((address: Parameters<typeof openSubagent>[0]) => {
-      leaveKanbanPanel(ctx)
-      return openSubagent.call(sessions, address)
-    }) as typeof openSubagent
-    ;(bound as unknown as { kbBound?: boolean }).kbBound = true
-    sessions.openSubagent = bound
+  if (typeof uiWorkspace?.openSession !== 'function') return false
+  try {
+    uiWorkspace.openSession(target)
+    return true
+  } catch (error) {
+    console.error('[@fonlan/dsh-task-kanban] cannot open the session view:', error)
+    return false
   }
 }

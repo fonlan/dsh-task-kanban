@@ -19,7 +19,14 @@ import { currentBranch, detectBaseRef, hasStashMessage, isGitRepo, isTreeDirty, 
 import { interactiveRefinementPrompt, mergePrompt, phasePrompt, refinementPrompt } from './prompts.js'
 import { loadCardSkill, parseSkillGesture, skillInvocationMessage } from './skills.js'
 import { registerKanbanTools, type KanbanToolResolver } from './tools.js'
-import type {} from '@deepseek-ai/dsh-agent-presets'
+// Declaration-merge only (erased at runtime): loads the `agentPresets` service
+// augmentation for `ctx.get('agentPresets')` below. The 0.1.x name
+// `@deepseek-ai/dsh-agent-presets` stopped shipping after 0.1.5-rc.3 and does
+// not exist at 0.2.0-rc.1; `@deepseek-ai/dsh-agent-preset` ships on both live
+// runtimes and carries the same `agentPresets` Context augmentation (it depends
+// on `@deepseek-ai/dsh-agent-preset-registry`, which owns the service and the
+// augmentation).
+import type {} from '@deepseek-ai/dsh-agent-preset'
 
 const WORKTREES_REL = ['.dsh', 'worktrees']
 
@@ -59,7 +66,7 @@ export class KanbanRunner implements KanbanToolResolver {
   private recovered = false
   /** Agents that already got their scoped kanban tools (event idempotency). */
   private toolScopedAgents = new WeakSet<object>()
-  private agentStartOff: (() => void) | undefined
+  private agentCreatedOff: (() => void) | undefined
 
   constructor(ctx: Context, store: TaskStore, settings: KanbanSettingsFace) {
     this.ctx = ctx
@@ -73,21 +80,28 @@ export class KanbanRunner implements KanbanToolResolver {
 
   start(): void {
     this.pumpTimer = setInterval(() => { void this.pump() }, 2500)
-    // `agent/session-start` fires for BOTH agents.create (startup) and
-    // agents.resume (host re-open after a restart). Kanban tools are scoped
-    // per agent, so a resumed refinement/phase/merge session would otherwise
-    // lose them — register there instead of only in createAgent's setup.
-    this.agentStartOff = this.ctx.on('agent/session-start', (payload: { agent?: { id?: string; ctx?: Context } }) => {
-      void this.onAgentSessionStart(payload.agent)
+    // `agent/created` is the lifecycle edge for an agent that entered the
+    // registry — dsh announces every creation path through it, including
+    // `agents.resume` (the factory re-opens a persisted session's agent after a
+    // host restart), and its `source` records which path that was. The previous
+    // subscription used `agent/session-start`, which existed in dsh 0.1.5 only
+    // and was already gone by 0.1.7 — so resumed refinement/phase/merge
+    // sessions silently lost their scoped kanban tools. `agent/created` exists
+    // in 0.1.7-rc.2 and 0.2.0-rc.1 with the same `{ agent, source }` payload.
+    // It dispatches as a serial listener, so this callback must not reject:
+    // tool registration is best-effort and a lookup failure must not fail the
+    // host's agent creation (hence the floating promise).
+    this.agentCreatedOff = this.ctx.on('agent/created', (payload: { agent?: { id?: string; ctx?: Context } }): undefined => {
+      void this.onAgentCreated(payload.agent)
     })
   }
 
   stop(): void {
     if (this.pumpTimer !== undefined) clearInterval(this.pumpTimer)
     this.pumpTimer = undefined
-    if (this.agentStartOff !== undefined) {
-      this.agentStartOff()
-      this.agentStartOff = undefined
+    if (this.agentCreatedOff !== undefined) {
+      this.agentCreatedOff()
+      this.agentCreatedOff = undefined
     }
   }
 
@@ -217,12 +231,13 @@ export class KanbanRunner implements KanbanToolResolver {
   }
 
   /**
-   * The single place kanban tools get registered. `agent/session-start` fires
-   * for BOTH `agents.create` (startup) and `agents.resume` (host re-open after
-   * a restart), so a resumed refinement/phase/merge session keeps its scoped
+   * The single place kanban tools get registered. Subscribed to
+   * `agent/created`, which fires for BOTH `agents.create` (startup) and
+   * `agents.resume` (host re-open after a restart) and carries the path in its
+   * `source`, so a resumed refinement/phase/merge session keeps its scoped
    * tools. Idempotent per agent object; non-kanban sessions are skipped.
    */
-  private async onAgentSessionStart(agent: { id?: string; ctx?: Context } | undefined): Promise<void> {
+  private async onAgentCreated(agent: { id?: string; ctx?: Context } | undefined): Promise<void> {
     if (agent === undefined || agent.id === undefined || agent.ctx === undefined) return
     if (this.toolScopedAgents.has(agent)) return
     let cardId = this.sessionCards.get(agent.id)
@@ -611,9 +626,9 @@ export class KanbanRunner implements KanbanToolResolver {
       sessionId,
       meta: { cwd, ...(presetId !== undefined ? { agentPreset: presetId } : {}) },
       ...(agentOptions !== undefined ? { agentOptions } : {}),
-      // Kanban tools are NOT registered here: `agent/session-start` (see
-      // start()) fires for both create and resume, keeping them available
-      // even when the host re-opens a persisted kanban session.
+      // Kanban tools are NOT registered here: `agent/created` (see start())
+      // fires for both create and resume, keeping them available even when the
+      // host re-opens a persisted kanban session.
       setup: async (agentCtx) => {
         const agentPresets = agentCtx.get('agentPresets') as
           | { mount(agentCtx: unknown, id?: string): Promise<unknown> }

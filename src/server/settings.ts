@@ -11,7 +11,15 @@ import type { KanbanSessionKind, KanbanSettingsShape } from '../shared/card.js'
 
 export const KANBAN_SETTINGS_NS = 'task-kanban'
 
-export const KanbanSettingsSchema: z<KanbanSettingsShape> = z.object({
+/**
+ * The entry config schema. Deliberately UNANNOTATED: schemastery >= 3.18.3
+ * added a third `Mode` type parameter, so `.default().volatile()` fields have
+ * output type `Volatile<T>` and an explicit `z<KanbanSettingsShape>` no longer
+ * compiles (the schema's `meta.default` then carries `Volatile<number>`, which
+ * is not a `number`). The plain `KanbanSettingsShape` interface stays the
+ * plugin-facing shape: `registerSettings` unwraps the live cells below.
+ */
+export const KanbanSettingsSchema = z.object({
   // Volatile: the settings plane (settings page / settings.update) only
   // writes volatile-marked fields on dsh >= 0.1.7.
   maxParallelWorkers: z.natural().min(1).default(1).volatile(),

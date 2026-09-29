@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { KanbanCard, Lane, PhaseAttempt, PlanPhase } from '../shared/card'
 import { DROP_RULES, laneOf } from '../shared/lanes'
 import { api, gatewaySkillList, type SkillOption } from './api'
-import { getClient, leaveKanbanPanel } from './kanban-state'
+import { openSessionView } from './kanban-state'
 import { en, zh } from './locales'
 import './board.css'
 
@@ -157,17 +157,10 @@ export function BoardRoot(props: BoardProps): JSX.Element {
   }, [cards, refresh, showToast, t])
 
   const openSession = useCallback((sessionId: string) => {
-    const ctx = getClient()
-    // Return the center column to the Conversation first: `sessions.open` is
-    // wrapped by bindSessionNavigation as well, but a runtime without that
-    // binding must still leave the board before the session renders.
-    leaveKanbanPanel(ctx)
-    if (ctx === null) return
-    try {
-      ;(ctx.sessions as { open(id: string): void }).open(sessionId)
-    } catch {
-      showToast(t('sessionNotListed'))
-    }
+    // The shell's view owner retains the session and reveals the Conversation
+    // in one action, so the board itself needs no panel teardown; a runtime
+    // without that face cannot show the session at all.
+    if (!openSessionView(sessionId)) showToast(t('sessionNotListed'))
   }, [showToast, t])
 
   if (items.length === 0) {

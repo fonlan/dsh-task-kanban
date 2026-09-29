@@ -8,7 +8,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import { BoardRoot } from './board'
 import { KanbanPanelIcon, KanbanSettingsSection } from './sections'
 import { LOCALE_NS, zh, en } from './locales'
-import { KANBAN_PANEL_ID, setClient, bindSessionNavigation } from './kanban-state'
+import { KANBAN_PANEL_ID, setClient } from './kanban-state'
 
 /** The settings sidebar entry this plugin's page owns (must stay stable). */
 const SETTINGS_SECTION_ID = 'task-kanban'
@@ -19,8 +19,9 @@ export const inject = ['slots', 'sessions', 'workspaces', 'locale']
 /** Client plugin body. */
 export function apply(ctx: ClientContext): void {
   setClient(ctx)
-  // Selecting a session while the board is open must return to the Conversation.
-  bindSessionNavigation(ctx)
+  // Session opening goes through the shell's own view owner
+  // (`ctx.uiWorkspace.openSession`, see kanban-state.ts), which already returns
+  // the center column to the Conversation — no wrapper to install here.
 
   // Live translate bound to the active locale (labels re-read it per call).
   const t = ctx.locale.bind(LOCALE_NS)

@@ -128,9 +128,9 @@ const settle = (runner: KanbanRunner, sessionId: SessionId, plan: KanbanCard['pl
     .settlePhaseTitle(sessionId, plan, phaseIndex)
 
 const call = (runner: KanbanRunner, agent: unknown): Promise<void> =>
-  (runner as unknown as { onAgentSessionStart(a: unknown): Promise<void> }).onAgentSessionStart(agent)
+  (runner as unknown as { onAgentCreated(a: unknown): Promise<void> }).onAgentCreated(agent)
 
-describe('KanbanRunner.onAgentSessionStart', () => {
+describe('KanbanRunner.onAgentCreated', () => {
   it('registers the kanban tools for a resumed kanban session (store lookup)', async () => {
     const store = makeStore(card('refining'))
     await store.mutate('c1', (c) => { c.sessions.refinement.push(SID) })
@@ -169,6 +169,28 @@ describe('KanbanRunner.onAgentSessionStart', () => {
     await call(runner, agent)
     await call(runner, agent)
     expect(registered).toBe(3)
+  })
+})
+
+describe('KanbanRunner.start', () => {
+  it('subscribes to the agent/created lifecycle edge, not the removed agent/session-start', () => {
+    // Regression: `agent/session-start` existed in dsh 0.1.5 only, so this
+    // listener was dead on 0.1.7+ and resumed kanban sessions lost their tools.
+    const names: string[] = []
+    const ctx = {
+      on: (name: string) => {
+        names.push(name)
+        return () => { /* dispose */ }
+      },
+      get: () => undefined,
+    } as unknown as Context
+    const runner = makeRunner(ctx, makeStore(card('refining')))
+
+    runner.start()
+    runner.stop()
+
+    expect(names).toContain('agent/created')
+    expect(names).not.toContain('agent/session-start')
   })
 })
 
@@ -222,7 +244,7 @@ describe('KanbanRunner.settlePhaseTitle', () => {
   })
 })
 
-describe('KanbanRunner.settleResumedPhaseTitle via onAgentSessionStart', () => {
+describe('KanbanRunner.settleResumedPhaseTitle via onAgentCreated', () => {
   it('renames a historical (non-live) phase session whose title is fallback', async () => {
     const store = makeStore(makePlanCard('error'))
     await store.mutate('c1', (c) => {
